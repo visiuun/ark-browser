@@ -2,6 +2,16 @@
 
 package dev.vis.ark.ui
 
+import kotlin.math.roundToInt
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.content.ClipData
@@ -47,7 +57,15 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
     val cs = MaterialTheme.colorScheme
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    val scroll = rememberScrollState()
+    val density = LocalDensity.current
+    // The sheet ends at the "More" handle; History, Downloads and the other tools sit below the fold.
+    var fold by remember { mutableIntStateOf(0) }
+    Column(
+        Modifier
+            .then(if (fold > 0) Modifier.heightIn(max = with(density) { fold.toDp() }) else Modifier)
+            .verticalScroll(scroll)
+    ) {
         // ---- URL pill: back · forward · domain · copy link · reload
         Surface(shape = CircleShape, color = cs.surfaceContainerHighest, modifier = Modifier.fillMaxWidth().height(76.dp)) {
             Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -131,7 +149,24 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
             }
         }, onClick = { onAction(MenuAction.SiteSettings) })
 
-        Spacer(Modifier.height(8.dp))
+        // ---- "More" handle: tap (or just scroll) to reach the extra tools, tap again to go back up.
+        val opened = if (scroll.maxValue > 0) scroll.value.toFloat() / scroll.maxValue else 0f
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .onPlaced { fold = (it.positionInParent().y + it.size.height).roundToInt() }
+                .padding(top = 4.dp)
+                .height(40.dp)
+                .clip(CircleShape)
+                .clickable { scope.launch { scroll.animateScrollTo(if (opened > 0.5f) 0 else scroll.maxValue) } },
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(if (opened > 0.5f) "Less" else "More", style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
+            Spacer(Modifier.width(4.dp))
+            MIcon(Sym.KeyboardArrowDown, null, Modifier.size(20.dp).rotate(180f * opened), tint = cs.onSurfaceVariant)
+        }
+
+        Spacer(Modifier.height(6.dp))
 
         // ---- Extra tools: one 2x4 connected grid (outer corners round, the rows meet tight)
         ConnectedRow(

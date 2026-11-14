@@ -2,6 +2,11 @@
 
 package dev.vis.ark.ui
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -99,6 +104,34 @@ fun ArcSheet(
         if (visible) BackHandler(onBack = onDismiss)
         val drag = remember { Animatable(0f) }
         val scope = rememberCoroutineScope()
+        val dismiss by rememberUpdatedState(onDismiss)
+        // Scrollable content (e.g. the menu) swallows drags, so pulling down at its top moves the sheet
+        // through nested scrolling instead; pushing back up takes the sheet back before the content scrolls.
+        val pull = remember {
+            object : NestedScrollConnection {
+                // A drag that scrolled the content back to the top stops there; only a fresh pull moves the sheet.
+                var scrolled = false
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y >= 0f || drag.value <= 0f) return Offset.Zero
+                    val take = maxOf(available.y, -drag.value)
+                    scope.launch { drag.snapTo(drag.value + take) }
+                    return Offset(0f, take)
+                }
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (consumed.y != 0f) scrolled = true
+                    if (scrolled || available.y <= 0f || source != NestedScrollSource.UserInput) return Offset.Zero
+                    scope.launch { drag.snapTo(drag.value + available.y) }
+                    return Offset(0f, available.y)
+                }
+                override suspend fun onPreFling(available: Velocity): Velocity {
+                    scrolled = false
+                    if (drag.value <= 0f) return Velocity.Zero
+                    if (drag.value > 220f || available.y > 2200f) dismiss()
+                    drag.animateTo(0f, motion.fastSpatialSpec())
+                    return available
+                }
+            }
+        }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Surface(
                 shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
@@ -107,6 +140,7 @@ fun ArcSheet(
                     .widthIn(max = 640.dp)
                     .fillMaxWidth()
                     .offset { IntOffset(0, drag.value.roundToInt()) }
+                    .nestedScroll(pull)
                     .draggable(
                         rememberDraggableState { d -> scope.launch { drag.snapTo((drag.value + d).coerceAtLeast(0f)) } },
                         Orientation.Vertical,

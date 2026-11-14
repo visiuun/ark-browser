@@ -111,7 +111,11 @@ fun ArkRoot(activity: MainActivity) {
     LaunchedEffect(MainActivity.snack) {
         val s = MainActivity.snack ?: return@LaunchedEffect
         snackHost.currentSnackbarData?.dismiss()
-        val res = snackHost.showSnackbar(s.message, s.action, withDismissAction = false, duration = if (s.action != null) SnackbarDuration.Long else SnackbarDuration.Short)
+        // Compose's own durations (4 s, or 10 s with a button) linger far too long for quick notes like
+        // "Downloading…"; time them out ourselves: 2.5 s, or 4 s when there's a button to reach.
+        val res = kotlinx.coroutines.withTimeoutOrNull(if (s.action != null) 4000L else 2500L) {
+            snackHost.showSnackbar(s.message, s.action, withDismissAction = false, duration = SnackbarDuration.Indefinite)
+        }
         if (res == SnackbarResult.ActionPerformed) s.onAction?.invoke()
         if (MainActivity.snack?.id == s.id) MainActivity.snack = null
     }
