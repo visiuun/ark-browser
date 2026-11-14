@@ -2,6 +2,8 @@
 
 package dev.vis.ark.ui
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import android.content.ClipData
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,7 +85,7 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
             }
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
 
         // ---- Four connected tiles
         val pinned = tab != null && Prefs.isPinned(tab.url)
@@ -99,10 +101,10 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
                 Triple(Sym.FindInPage, "Find") { onAction(MenuAction.Find) },
                 Triple(Sym.Share, "Share") { tab?.let { Browser.host?.share(it.title, it.url) } },
             ),
-            selected = { it == 1 && pinned },
+            selected = { it == 1 && pinned }, height = 76.dp,
         )
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(6.dp))
 
         // ---- List rows
         val tr = tab?.translation
@@ -115,9 +117,9 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
         }
         MenuRow(Sym.Translate, "Translate", translateSub, onClick = { onAction(MenuAction.Translate) })
         MenuRow(Sym.ZoomOutMap, "Zoom", "${((tab?.zoom ?: 1f) * 100).toInt()}%", onClick = null) {
-            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom + 0.1f) } }, enabled = tab != null) { MIcon(Sym.Add, "Zoom in", Modifier.size(30.dp)) }
-            Spacer(Modifier.width(14.dp))
-            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom - 0.1f) } }, enabled = tab != null) { MIcon(Sym.Remove, "Zoom out", Modifier.size(30.dp)) }
+            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom + 0.1f) } }, enabled = tab != null) { MIcon(Sym.Add, "Zoom in", Modifier.size(24.dp)) }
+            Spacer(Modifier.width(4.dp))
+            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom - 0.1f) } }, enabled = tab != null) { MIcon(Sym.Remove, "Zoom out", Modifier.size(24.dp)) }
         }
         MenuRow(Sym.DesktopWindows, "Desktop Site", null, onClick = { tab?.let { Browser.setDesktop(it, !it.desktop) } }) {
             Checkbox(checked = tab?.desktop == true, onCheckedChange = { c -> tab?.let { Browser.setDesktop(it, c) } }, enabled = tab != null)
@@ -129,25 +131,25 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
             }
         }, onClick = { onAction(MenuAction.SiteSettings) })
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // ---- Extra tools (Ark extras), as small connected groups
+        // ---- Extra tools: one 2x4 connected grid (outer corners round, the rows meet tight)
         ConnectedRow(
             listOf(
                 Triple(Sym.History, "History") { onAction(MenuAction.History) },
                 Triple(Sym.Download, "Downloads") { onAction(MenuAction.Downloads) },
                 Triple(Sym.Extension, "Add-ons") { onAction(MenuAction.Extensions) },
                 Triple(Sym.Settings, "Settings") { onAction(MenuAction.Settings) },
-            ), height = 76.dp, iconSize = 24.dp, container = cs.surfaceContainerHigh,
+            ), height = 62.dp, iconSize = 22.dp, container = cs.surfaceContainerHigh, bottomRow = false,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         ConnectedRow(
             listOf(
                 Triple(Sym.VisibilityOff, "Private") { onAction(MenuAction.PrivateTab) },
                 Triple(Sym.AddToHomeScreen, "Home") { onAction(MenuAction.HomeScreen) },
                 Triple(Sym.PictureAsPdf, "PDF") { onAction(MenuAction.Pdf) },
                 Triple(Sym.Print, "Print") { onAction(MenuAction.Print) },
-            ), height = 76.dp, iconSize = 24.dp, container = cs.surfaceContainerHigh,
+            ), height = 62.dp, iconSize = 22.dp, container = cs.surfaceContainerHigh, topRow = false,
         )
         Spacer(Modifier.height(8.dp))
     }
@@ -158,16 +160,17 @@ private fun MenuRow(icon: String, title: String, subtitle: String?, onClick: (()
     Row(
         Modifier
             .fillMaxWidth()
-            .height(78.dp)
+            .height(58.dp)
+            .clip(RoundedCornerShape(18.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MIcon(icon, null, Modifier.size(30.dp))
-        Spacer(Modifier.width(22.dp))
+        MIcon(icon, null, Modifier.size(24.dp))
+        Spacer(Modifier.width(18.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineSmall)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (trailing != null) Box { Row(verticalAlignment = Alignment.CenterVertically) { trailing() } }
     }

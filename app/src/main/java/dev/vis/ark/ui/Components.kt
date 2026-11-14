@@ -199,20 +199,23 @@ fun ConnectedTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
-    height: Dp = 104.dp,
-    iconSize: Dp = 30.dp,
+    height: Dp = 84.dp,
+    iconSize: Dp = 24.dp,
     container: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    topRow: Boolean = true,
+    bottomRow: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val motion = MaterialTheme.motionScheme
-    val outer = 30.dp
-    val inner by animateDpAsState(if (pressed) 22.dp else 6.dp, motion.fastSpatialSpec(), label = "inner")
+    val outer = 26.dp
+    val inner by animateDpAsState(if (pressed) 20.dp else 6.dp, motion.fastSpatialSpec(), label = "inner")
     val first = index == 0
     val last = index == count - 1
+    // Only the group's outside corners are round; in a multi-row grid the rows meet with tight corners.
     val shape = RoundedCornerShape(
-        topStart = if (first) outer else inner, bottomStart = if (first) outer else inner,
-        topEnd = if (last) outer else inner, bottomEnd = if (last) outer else inner,
+        topStart = if (first && topRow) outer else inner, bottomStart = if (first && bottomRow) outer else inner,
+        topEnd = if (last && topRow) outer else inner, bottomEnd = if (last && bottomRow) outer else inner,
     )
     val cs = MaterialTheme.colorScheme
     Surface(
@@ -223,19 +226,26 @@ fun ConnectedTile(
         interactionSource = interaction,
         modifier = modifier.height(height),
     ) {
+        val compact = height < 76.dp
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             MIcon(icon, null, Modifier.size(iconSize))
-            Spacer(Modifier.height(10.dp))
-            Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
+            Text(
+                label, style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            )
         }
     }
 }
 
 @Composable
-fun ConnectedRow(items: List<Triple<String, String, () -> Unit>>, modifier: Modifier = Modifier, height: Dp = 104.dp, selected: (Int) -> Boolean = { false }, iconSize: Dp = 30.dp, container: Color = MaterialTheme.colorScheme.surfaceContainerHighest) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+fun ConnectedRow(
+    items: List<Triple<String, String, () -> Unit>>, modifier: Modifier = Modifier, height: Dp = 84.dp, selected: (Int) -> Boolean = { false },
+    iconSize: Dp = 24.dp, container: Color = MaterialTheme.colorScheme.surfaceContainerHighest, topRow: Boolean = true, bottomRow: Boolean = true,
+) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         items.forEachIndexed { i, (icon, label, action) ->
-            ConnectedTile(i, items.size, icon, label, action, Modifier.weight(1f), selected(i), height, iconSize, container)
+            ConnectedTile(i, items.size, icon, label, action, Modifier.weight(1f), selected(i), height, iconSize, container, topRow, bottomRow)
         }
     }
 }
