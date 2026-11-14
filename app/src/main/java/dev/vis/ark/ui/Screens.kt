@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -121,8 +122,15 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             } else item {
                 Surface(onClick = { activity.openDefaultBrowserSettings() }, shape = RoundedCornerShape(32.dp), color = cs.primaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(52.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.primary), contentAlignment = Alignment.Center) {
-                            Text("A", color = cs.onPrimary, style = MaterialTheme.typography.titleLarge)
+                        // The real app icon: its background colour plus the adaptive foreground (72dp visible of 108dp).
+                        Box(
+                            Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(androidx.compose.ui.res.colorResource(dev.vis.ark.R.color.ic_bg)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            androidx.compose.foundation.Image(
+                                androidx.compose.ui.res.painterResource(dev.vis.ark.R.drawable.ic_launcher_fg), null,
+                                Modifier.requiredSize(78.dp),
+                            )
                         }
                         Spacer(Modifier.width(16.dp))
                         Column {

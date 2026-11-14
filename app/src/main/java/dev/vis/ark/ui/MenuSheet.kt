@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.rememberCoroutineScope
 import dev.vis.ark.browser.Browser
 import dev.vis.ark.browser.Tab
@@ -60,9 +61,12 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
                 ) {
                     if (tab?.isSecure == true) MIcon(Sym.Lock, null, Modifier.size(15.dp), tint = cs.onSurfaceVariant)
                     Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (tab == null) "Search" else tab.host.ifBlank { tab.url },
-                        style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = if (tab == null) TextOverflow.Ellipsis else TextOverflow.StartEllipsis, textAlign = TextAlign.Center,
+                    // Shrinks (down to 14sp) before it has to cut the domain short.
+                    androidx.compose.foundation.text.BasicText(
+                        if (tab == null) "Search" else tab.host.removePrefix("www.").ifBlank { tab.url },
+                        style = MaterialTheme.typography.titleLarge.copy(color = cs.onSurface, textAlign = TextAlign.Center),
+                        maxLines = 1, overflow = if (tab == null) TextOverflow.Ellipsis else TextOverflow.StartEllipsis,
+                        autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.titleLarge.fontSize),
                     )
                 }
                 IconButton(onClick = {
