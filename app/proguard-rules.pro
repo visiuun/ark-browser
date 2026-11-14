@@ -1,0 +1,3 @@
+-keep class org.mozilla.** { *; }
+-dontwarn org.mozilla.**
+-dontwarn javax.annotation.**

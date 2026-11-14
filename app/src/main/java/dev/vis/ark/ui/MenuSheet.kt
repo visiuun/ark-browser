@@ -1,0 +1,170 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
+package dev.vis.ark.ui
+
+import android.content.ClipData
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.rememberCoroutineScope
+import dev.vis.ark.browser.Browser
+import dev.vis.ark.browser.Tab
+import dev.vis.ark.data.Prefs
+import kotlinx.coroutines.launch
+
+enum class MenuAction { EditUrl, Summarize, Find, Translate, SiteSettings, History, Downloads, Extensions, Settings, PrivateTab, HomeScreen, Pdf, Print }
+
+@Composable
+fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        // ---- URL pill: back · forward · domain · copy link · reload
+        Surface(shape = CircleShape, color = cs.surfaceContainerHighest, modifier = Modifier.fillMaxWidth().height(76.dp)) {
+            Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { tab?.session?.goBack(); onDismiss() }, enabled = tab?.canBack == true) {
+                    MIcon(Sym.ArrowBack, "Back", Modifier.size(28.dp))
+                }
+                IconButton(onClick = { tab?.session?.goForward(); onDismiss() }, enabled = tab?.canForward == true) {
+                    MIcon(Sym.ArrowForward, "Forward", Modifier.size(28.dp))
+                }
+                Row(
+                    Modifier.weight(1f).height(56.dp).clickable { onAction(MenuAction.EditUrl) },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                ) {
+                    if (tab?.isSecure == true) MIcon(Sym.Lock, null, Modifier.size(15.dp), tint = cs.onSurfaceVariant)
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        if (tab == null) "Search or type URL" else tab.host.ifBlank { tab.url },
+                        style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.StartEllipsis, textAlign = TextAlign.Center,
+                    )
+                }
+                IconButton(onClick = {
+                    tab?.let { t ->
+                        scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("URL", t.url))) }
+                        Browser.host?.snack("Link copied")
+                    }
+                }, enabled = tab != null) { MIcon(Sym.Link, "Copy link", Modifier.size(28.dp)) }
+                IconButton(onClick = {
+                    tab?.session?.let { if (tab.loading) it.stop() else it.reload() }; onDismiss()
+                }, enabled = tab != null) {
+                    MIcon(if (tab?.loading == true) Sym.Close else Sym.Refresh, "Reload", Modifier.size(28.dp))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        // ---- Four connected tiles
+        val pinned = tab != null && Prefs.isPinned(tab.url)
+        ConnectedRow(
+            listOf(
+                Triple(Sym.FormatListBulleted, "Summarize") { onAction(MenuAction.Summarize) },
+                Triple(if (pinned) "*" + Sym.PushPin else Sym.PushPin, if (pinned) "Unpin" else "Pin") {
+                    tab?.let { t ->
+                        val now = Prefs.togglePin(t.url, t.displayTitle)
+                        Browser.host?.snack(if (now) "Pinned ${t.host}" else "Unpinned ${t.host}")
+                    }
+                },
+                Triple(Sym.FindInPage, "Find") { onAction(MenuAction.Find) },
+                Triple(Sym.Share, "Share") { tab?.let { Browser.host?.share(it.title, it.url) } },
+            ),
+            selected = { it == 1 && pinned },
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        // ---- List rows
+        val tr = tab?.translation
+        val translateSub = when {
+            tab?.translating == true -> "Translating…"
+            tr?.requestedTranslationPair != null -> "Translated to ${tr.requestedTranslationPair!!.toLanguage}"
+            tr?.detectedLanguages?.docLangTag != null -> "Page language: ${tr.detectedLanguages!!.docLangTag}"
+            tab?.offerTranslate == true -> "Available for this page"
+            else -> null
+        }
+        MenuRow(Sym.Translate, "Translate", translateSub, onClick = { onAction(MenuAction.Translate) })
+        MenuRow(Sym.ZoomOutMap, "Zoom", "${((tab?.zoom ?: 1f) * 100).toInt()}%", onClick = null) {
+            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom + 0.1f) } }, enabled = tab != null) { MIcon(Sym.Add, "Zoom in", Modifier.size(30.dp)) }
+            Spacer(Modifier.width(14.dp))
+            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom - 0.1f) } }, enabled = tab != null) { MIcon(Sym.Remove, "Zoom out", Modifier.size(30.dp)) }
+        }
+        MenuRow(Sym.DesktopWindows, "Desktop Site", null, onClick = { tab?.let { Browser.setDesktop(it, !it.desktop) } }) {
+            Checkbox(checked = tab?.desktop == true, onCheckedChange = { c -> tab?.let { Browser.setDesktop(it, c) } }, enabled = tab != null)
+        }
+        MenuRow(Sym.Settings, "Site Settings", tab?.let { t ->
+            buildString {
+                append(if (t.isSecure) "Secure" else "Not secure")
+                if (t.blockedCount > 0) append(" · ${t.blockedCount} trackers blocked")
+            }
+        }, onClick = { onAction(MenuAction.SiteSettings) })
+
+        Spacer(Modifier.height(16.dp))
+
+        // ---- Extra tools (Ark extras), as small connected groups
+        ConnectedRow(
+            listOf(
+                Triple(Sym.History, "History") { onAction(MenuAction.History) },
+                Triple(Sym.Download, "Downloads") { onAction(MenuAction.Downloads) },
+                Triple(Sym.Extension, "Add-ons") { onAction(MenuAction.Extensions) },
+                Triple(Sym.Settings, "Settings") { onAction(MenuAction.Settings) },
+            ), height = 76.dp, iconSize = 24.dp, container = cs.surfaceContainerHigh,
+        )
+        Spacer(Modifier.height(4.dp))
+        ConnectedRow(
+            listOf(
+                Triple(Sym.VisibilityOff, "Private") { onAction(MenuAction.PrivateTab) },
+                Triple(Sym.AddToHomeScreen, "Home") { onAction(MenuAction.HomeScreen) },
+                Triple(Sym.PictureAsPdf, "PDF") { onAction(MenuAction.Pdf) },
+                Triple(Sym.Print, "Print") { onAction(MenuAction.Print) },
+            ), height = 76.dp, iconSize = 24.dp, container = cs.surfaceContainerHigh,
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun MenuRow(icon: String, title: String, subtitle: String?, onClick: (() -> Unit)?, trailing: (@Composable () -> Unit)? = null) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(78.dp)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MIcon(icon, null, Modifier.size(30.dp))
+        Spacer(Modifier.width(22.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.headlineSmall)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (trailing != null) Box { Row(verticalAlignment = Alignment.CenterVertically) { trailing() } }
+    }
+}

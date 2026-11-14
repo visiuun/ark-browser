@@ -1,0 +1,60 @@
+package dev.vis.ark.ui
+
+/** Material Symbols Rounded glyphs (codepoints into res/font/material_symbols.ttf). */
+object Sym {
+    const val Add = "\uE145" // add
+    const val AddToHomeScreen = "\uF2B9" // add_to_home_screen
+    const val Air = "\uEFD8" // air
+    const val ArrowBack = "\uE5C4" // arrow_back
+    const val ArrowForward = "\uE5C8" // arrow_forward
+    const val Bolt = "\uEA0B" // bolt
+    const val CameraAlt = "\uE412" // photo_camera
+    const val Check = "\uE668" // check
+    const val Close = "\uE5CD" // close
+    const val Code = "\uE86F" // code
+    const val ContentCopy = "\uE14D" // content_copy
+    const val ContentPaste = "\uE14F" // content_paste
+    const val Delete = "\uE92E" // delete
+    const val DeleteSweep = "\uE16C" // delete_sweep
+    const val Description = "\uE873" // description
+    const val DesktopWindows = "\uE30C" // desktop_windows
+    const val Download = "\uF090" // download
+    const val Extension = "\uE87B" // extension
+    const val FindInPage = "\uE880" // find_in_page
+    const val FolderOpen = "\uE2C8" // folder_open
+    const val FormatListBulleted = "\uE241" // format_list_bulleted
+    const val GridView = "\uE9B0" // grid_view
+    const val History = "\uE8B3" // history
+    const val Image = "\uE3F4" // image
+    const val Incognito = "\uF5E4" // domino_mask
+    const val KeyboardArrowDown = "\uE313" // keyboard_arrow_down
+    const val KeyboardArrowUp = "\uE316" // keyboard_arrow_up
+    const val Language = "\uEA07" // language
+    const val Link = "\uE250" // link
+    const val LocationOn = "\uF1DB" // location_on
+    const val Lock = "\uE899" // lock
+    const val LockOpen = "\uE898" // lock_open
+    const val Mic = "\uE31D" // mic
+    const val NorthWest = "\uF1E2" // north_west
+    const val Notifications = "\uE7F5" // notifications
+    const val OpenInBrowser = "\uE89D" // open_in_browser
+    const val OpenInNew = "\uE89E" // open_in_new
+    const val Password = "\uF042" // password
+    const val PictureAsPdf = "\uE415" // picture_as_pdf
+    const val Print = "\uE8AD" // print
+    const val Public = "\uE80B" // public
+    const val PushPin = "\uF10D" // push_pin
+    const val Refresh = "\uE5D5" // refresh
+    const val Remove = "\uE15B" // remove
+    const val Search = "\uEF7A" // search
+    const val Settings = "\uE8B8" // settings
+    const val Share = "\uE80D" // share
+    const val Shield = "\uE9E0" // shield
+    const val Tab = "\uE8D8" // tab
+    const val Translate = "\uE8E2" // translate
+    const val ViewCarousel = "\uE8EB" // view_carousel
+    const val VisibilityOff = "\uF5E4" // domino_mask
+    const val WaterDrop = "\uE798" // water_drop
+    const val WbSunny = "\uE430" // wb_sunny
+    const val ZoomOutMap = "\uE56B" // zoom_out_map
+}
