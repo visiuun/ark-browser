@@ -2,6 +2,10 @@
 
 package dev.vis.ark.ui
 
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.TextButton
+import dev.vis.ark.data.Prefs
+import dev.vis.ark.browser.AiSummary
 import android.content.ClipData
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -105,16 +109,41 @@ private suspend fun extractPage(tab: Tab): Extracted? {
 fun SummaryContent(tab: Tab) {
     val cs = MaterialTheme.colorScheme
     var summary by remember { mutableStateOf<Summarizer.Summary?>(null) }
+    var page by remember { mutableStateOf<Extracted?>(null) }
     var failed by remember { mutableStateOf(false) }
+    var ai by remember { mutableStateOf<AiSummary.Result?>(null) }
+    var aiLoading by remember { mutableStateOf(false) }
+    var aiError by remember { mutableStateOf<String?>(null) }
+    var aiRun by remember { mutableStateOf(0) }
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
+    val aiAllowed = !tab.private && Prefs.aiSummary == 1
+
     LaunchedEffect(tab.id, tab.url) {
-        summary = null; failed = false
+        summary = null; failed = false; page = null; ai = null; aiError = null
         val ex = extractPage(tab)
         if (ex == null || ex.text.isBlank()) { failed = true; return@LaunchedEffect }
+        page = ex
         summary = withContext(Dispatchers.Default) { Summarizer.summarize(ex.text, ex.headings, ex.links) }
-        if (summary!!.bullets.isEmpty()) failed = true
+        if (summary!!.bullets.isEmpty() && ex.text.length < 200) failed = true
     }
+    LaunchedEffect(page, aiAllowed, aiRun) {
+        val ex = page ?: return@LaunchedEffect
+        if (!aiAllowed || ex.text.length < 200) return@LaunchedEffect
+        aiLoading = true; aiError = null
+        runCatching { AiSummary.summarize(tab.displayTitle, tab.url, ex.text) }
+            .onSuccess { ai = it }
+            .onFailure { aiError = it.message ?: "Couldn't reach the AI service" }
+        aiLoading = false
+    }
+
+    fun shareText(): String {
+        val a = ai
+        val body = if (a != null) (if (a.tldr.isNotBlank()) a.tldr + "\n\n" else "") + a.points.joinToString("\n") { "• $it" }
+            else summary?.bullets.orEmpty().joinToString("\n") { "• $it" }
+        return tab.displayTitle + "\n\n" + body
+    }
+
     Column(Modifier.heightIn(max = 620.dp).verticalScroll(rememberScrollState())) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Favicon(tab.favicon, tab.host, 44.dp, shape = MaterialShapes.Cookie9Sided.toShape(), container = cs.primaryContainer)
@@ -127,7 +156,7 @@ fun SummaryContent(tab: Tab) {
         Spacer(Modifier.height(18.dp))
         val s = summary
         when {
-            failed && s?.bullets.isNullOrEmpty() -> Text("This page doesn't have enough readable text to summarize.", color = cs.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
+            failed -> Text("This page doesn't have enough readable text to summarize.", color = cs.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
             s == null -> Column(Modifier.fillMaxWidth().padding(vertical = 30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 LoadingIndicator(Modifier.size(64.dp))
                 Text("Reading the page…", color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
@@ -139,27 +168,63 @@ fun SummaryContent(tab: Tab) {
                     InfoPill("${s.links}", "links", Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(16.dp))
-                Surface(shape = RoundedCornerShape(28.dp), color = cs.surfaceContainerHighest) {
-                    Column(Modifier.padding(18.dp)) {
-                        Text("Key points", style = MaterialTheme.typography.titleMedium, color = cs.primary)
-                        s.bullets.forEach { b ->
-                            Row(Modifier.padding(top = 10.dp)) {
-                                Box(Modifier.padding(top = 7.dp).size(8.dp).clip(MaterialShapes.Cookie4Sided.toShape()).background(cs.primary))
-                                Spacer(Modifier.width(12.dp))
-                                Text(b, style = MaterialTheme.typography.bodyLarge)
+
+                // One-time choice: real AI summaries (page text goes to Pollinations) or on-device only.
+                if (!tab.private && Prefs.aiSummary == 0) {
+                    Surface(shape = RoundedCornerShape(28.dp), color = cs.tertiaryContainer) {
+                        Column(Modifier.padding(18.dp)) {
+                            Text("Get a smarter summary?", style = MaterialTheme.typography.titleMedium, color = cs.onTertiaryContainer)
+                            Text(
+                                "Ark can send this page's text to Pollinations, a free, open-source AI service, to write a real summary. " +
+                                    "No account, and never for private tabs. Change it any time in Settings.",
+                                style = MaterialTheme.typography.bodyMedium, color = cs.onTertiaryContainer, modifier = Modifier.padding(top = 6.dp),
+                            )
+                            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { Prefs.aiSummary = 1 }) { Text("Use AI") }
+                                TextButton(onClick = { Prefs.aiSummary = 2 }) { Text("Keep on-device", color = cs.onTertiaryContainer) }
                             }
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
                 }
-                if (s.keywords.isNotEmpty()) {
-                    Text("Topics", style = MaterialTheme.typography.titleSmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        s.keywords.forEach { k ->
-                            Surface(shape = CircleShape, color = cs.secondaryContainer, onClick = { Browser.open(k, inNewTab = true) }) {
-                                Text(k, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
+
+                val a = ai
+                if (aiAllowed && (aiLoading || a != null)) {
+                    Surface(shape = RoundedCornerShape(28.dp), color = cs.surfaceContainerHighest) {
+                        Column(Modifier.padding(18.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                MIcon(Sym.Bolt, null, Modifier.size(18.dp), tint = cs.primary)
+                                Spacer(Modifier.width(6.dp))
+                                Text("AI summary", style = MaterialTheme.typography.titleMedium, color = cs.primary)
+                            }
+                            if (a == null) {
+                                Text("Writing the summary…", color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp, bottom = 8.dp))
+                                LinearWavyProgressIndicator(Modifier.fillMaxWidth())
+                            } else {
+                                if (a.tldr.isNotBlank()) Text(a.tldr, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp))
+                                a.points.forEach { b -> Bullet(b) }
                             }
                         }
                     }
+                    if (a != null && a.topics.isNotEmpty()) Topics(a.topics)
+                } else {
+                    val err = aiError
+                    if (aiAllowed && err != null) {
+                        Surface(shape = RoundedCornerShape(20.dp), color = cs.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(err, style = MaterialTheme.typography.bodySmall, color = cs.onErrorContainer, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { aiRun++ }) { Text("Retry") }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    Surface(shape = RoundedCornerShape(28.dp), color = cs.surfaceContainerHighest) {
+                        Column(Modifier.padding(18.dp)) {
+                            Text("Key sentences", style = MaterialTheme.typography.titleMedium, color = cs.primary)
+                            s.bullets.forEach { b -> Bullet(b) }
+                        }
+                    }
+                    if (s.keywords.isNotEmpty()) Topics(s.keywords)
                 }
                 if (s.headings.isNotEmpty()) {
                     Text("Outline", style = MaterialTheme.typography.titleSmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
@@ -167,18 +232,45 @@ fun SummaryContent(tab: Tab) {
                 }
                 Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = {
-                        val text = tab.displayTitle + "\n\n" + s.bullets.joinToString("\n") { "• $it" } + "\n\n" + tab.url
+                        val text = shareText() + "\n\n" + tab.url
                         scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Summary", text))) }
                         Browser.host?.snack("Summary copied")
                     }) { MIcon(Sym.ContentCopy, null); Spacer(Modifier.width(8.dp)); Text("Copy") }
-                    FilledTonalButton(onClick = {
-                        Browser.host?.share(tab.displayTitle + "\n\n" + s.bullets.joinToString("\n") { "• $it" }, tab.url)
-                    }) { MIcon(Sym.Share, null); Spacer(Modifier.width(8.dp)); Text("Share") }
+                    FilledTonalButton(onClick = { Browser.host?.share(shareText(), tab.url) }) {
+                        MIcon(Sym.Share, null); Spacer(Modifier.width(8.dp)); Text("Share")
+                    }
                 }
                 Text(
-                    "Summarized on your device — nothing is sent anywhere.", style = MaterialTheme.typography.labelSmall,
-                    color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                    when {
+                        a != null -> "Written by AI (${a.model} via Pollinations). It can make mistakes, so check the page for anything important."
+                        tab.private -> "Private tab: summarized on your device, nothing is sent anywhere."
+                        else -> "Key sentences picked on your device. Nothing is sent anywhere."
+                    },
+                    style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Bullet(text: String) {
+    val cs = MaterialTheme.colorScheme
+    Row(Modifier.padding(top = 10.dp)) {
+        Box(Modifier.padding(top = 7.dp).size(8.dp).clip(MaterialShapes.Cookie4Sided.toShape()).background(cs.primary))
+        Spacer(Modifier.width(12.dp))
+        Text(text, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun Topics(topics: List<String>) {
+    val cs = MaterialTheme.colorScheme
+    Text("Topics", style = MaterialTheme.typography.titleSmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        topics.forEach { k ->
+            Surface(shape = CircleShape, color = cs.secondaryContainer, onClick = { Browser.open(k, inNewTab = true) }) {
+                Text(k, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
             }
         }
     }

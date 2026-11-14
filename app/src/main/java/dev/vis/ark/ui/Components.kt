@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -162,12 +163,26 @@ fun TabsGlyph(count: Int, modifier: Modifier = Modifier, tint: Color = MaterialT
                 drawRoundRect(tint.copy(alpha = 0.85f), topLeft = Offset(size.width * 0.3f, size.height * 0.1f), size = Size(s, s), cornerRadius = CornerRadius(s * 0.24f))
             }
         }
-        if (count > 0) Text(
-            if (count > 99) "∞" else count.toString(),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            fontSize = 12.sp, fontWeight = FontWeight.Black,
-            modifier = Modifier.offset(x = 4.dp, y = (-5).dp),
-        )
+        // The count sits on the front card: same box (40dp canvas, card at 30%,10% sized 62%), same 10° tilt.
+        if (count > 0) Box(Modifier.size(40.dp)) {
+            Box(
+                Modifier.offset(x = 12.dp, y = 4.dp).size(24.8.dp).rotate(10f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (count > 99) "∞" else count.toString(),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontSize = 12.sp, fontWeight = FontWeight.Black, lineHeight = 12.sp,
+                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+                        lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+                            androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+                            androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+                        ),
+                    ),
+                )
+            }
+        }
     }
 }
 

@@ -61,6 +61,8 @@ object Prefs {
     var suggestions by Pref("suggestions", true)
 
     // Home
+    var homeMode by Pref("homeMode", 0)            // 0 Ark home, 1 blank (logo), 2 a page
+    var homeUrl by Pref("homeUrl", "")
     var homeWeather by Pref("homeWeather", true)
     var homeWiki by Pref("homeWiki", true)
     var homeHN by Pref("homeHN", true)
@@ -86,6 +88,8 @@ object Prefs {
     var desktopDefault by Pref("desktopDefault", false)
     var fontScale by Pref("fontScale", 1f)
     var remoteDebugging by Pref("remoteDebugging", false)
+    var uaArk by Pref("uaArk", true)                // append "Ark/<version>" to the user agent
+    var aiSummary by Pref("aiSummary", 0)          // 0 ask, 1 use AI (Pollinations), 2 on-device only
 
     // Tabs
     var restoreTabs by Pref("restoreTabs", true)

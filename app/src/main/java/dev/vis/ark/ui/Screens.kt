@@ -155,6 +155,23 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             item { ToggleRow("Search suggestions", Prefs.suggestions, 1, 2, "From DuckDuckGo autocomplete; never in private tabs") { Prefs.suggestions = it } }
 
             item { SectionLabel("Home") }
+            item {
+                ChoiceGroup("Homepage", listOf("Ark home", "Blank", "A page"), Prefs.homeMode, index = 0, count = if (Prefs.homeMode == 2) 2 else 1) { Prefs.homeMode = it }
+            }
+            if (Prefs.homeMode == 2) item {
+                TextRow("Homepage address", Prefs.homeUrl, "e.g. duckduckgo.com", 1, 2) { Prefs.homeUrl = it }
+            }
+            item {
+                Text(
+                    when (Prefs.homeMode) {
+                        1 -> "New tabs show just the Ark logo, like Arc. Tap it to search."
+                        2 -> "New tabs open this page. Long-press + for a private search."
+                        else -> "Clock, weather, pinned sites, Wikipedia and Hacker News. Customise it below."
+                    },
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 14.dp),
+                )
+            }
             item { ChoiceGroup("Clock", listOf("System", "12-hour", "24-hour"), Prefs.clock, index = 0, count = 7) { Prefs.clock = it } }
             item { ToggleRow("Weather", Prefs.homeWeather, 1, 7, "Open-Meteo, no account needed") { Prefs.homeWeather = it } }
             item { TextRow("Weather city", Prefs.weatherCity, "Leave empty to use your location", 2, 7) { Prefs.weatherCity = it } }
@@ -182,6 +199,14 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
                 }
             }
 
+            item { SectionLabel("Summarize") }
+            item {
+                ToggleRow(
+                    "AI summaries", Prefs.aiSummary == 1, 0, 1,
+                    "Sends the page's text to Pollinations, a free, open-source AI service, for a real summary. Off: key sentences are picked on your device. Never used in private tabs.",
+                ) { Prefs.aiSummary = if (it) 1 else 2 }
+            }
+
             item { SectionLabel("Privacy & security") }
             item { ChoiceGroup("Tracking protection", listOf("Off", "Standard", "Strict"), Prefs.etp, index = 0, count = 6) { Prefs.etp = it; apply() } }
             item { ToggleRow("HTTPS-only mode", Prefs.httpsOnly, 1, 6, "Upgrade every connection to HTTPS") { Prefs.httpsOnly = it; apply() } }
@@ -203,8 +228,13 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             item { ClickRow("Add-ons", "${Engine.extensions.size} installed · uBlock Origin, Dark Reader…", 2, 3) { onOpen(Screen.Extensions) } }
 
             item { SectionLabel("Advanced") }
-            item { ToggleRow("Remote debugging", Prefs.remoteDebugging, 0, 2, "Debug pages from desktop Firefox via USB") { Prefs.remoteDebugging = it; apply() } }
-            item { ClickRow("about:config", "Every Gecko preference, for experts", 1, 2) { Browser.newTab("about:config"); onBack() } }
+            item {
+                ToggleRow("Show Ark in user agent", Prefs.uaArk, 0, 3, "Websites see “Ark/${dev.vis.ark.BuildConfig.VERSION_NAME}” after Firefox. Turn off if a site misbehaves.") {
+                    Prefs.uaArk = it; Browser.applyUserAgent()
+                }
+            }
+            item { ToggleRow("Remote debugging", Prefs.remoteDebugging, 1, 3, "Debug pages from desktop Firefox via USB") { Prefs.remoteDebugging = it; apply() } }
+            item { ClickRow("about:config", "Every Gecko preference, for experts", 2, 3) { Browser.newTab("about:config"); onBack() } }
 
             item { SectionLabel("Updates") }
             item { UpdateSection(onOpenPage = { Browser.open(it, inNewTab = true); onBack() }) }

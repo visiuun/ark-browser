@@ -2,6 +2,20 @@
 
 package dev.vis.ark.ui
 
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -63,25 +77,14 @@ fun BottomBar(
             }
             .navigationBarsPadding()
     ) {
-        // Top edge: Arc's gradient hairline, which turns into an expressive wavy progress bar while loading.
+        // Top edge: an expressive wavy progress bar, only while the page is loading (space kept so nothing jumps).
         Box(Modifier.fillMaxWidth().height(10.dp), contentAlignment = Alignment.Center) {
-            AnimatedContent(tab?.loading == true, label = "progress") { loading ->
-                if (loading && tab != null) {
-                    LinearWavyProgressIndicator(
-                        progress = { (tab.progress / 100f).coerceIn(0.05f, 1f) },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                        color = if (private) cs.onTertiaryContainer else cs.primary,
-                    )
-                } else {
-                    Box(
-                        Modifier.fillMaxWidth().height(3.dp).background(
-                            Brush.horizontalGradient(
-                                if (private) listOf(cs.tertiary, cs.onTertiaryContainer, cs.tertiary)
-                                else listOf(cs.primary.copy(alpha = 0.85f), cs.tertiary.copy(alpha = 0.7f), cs.secondary.copy(alpha = 0.85f))
-                            )
-                        )
-                    )
-                }
+            androidx.compose.animation.AnimatedVisibility(visible = tab?.loading == true, enter = fadeIn(), exit = fadeOut()) {
+                if (tab != null) LinearWavyProgressIndicator(
+                    progress = { (tab.progress / 100f).coerceIn(0.05f, 1f) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+                    color = if (private) cs.onTertiaryContainer else cs.primary,
+                )
             }
         }
         Row(
@@ -89,10 +92,41 @@ fun BottomBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            // Tabs button: tap for the switcher, long-press to close, swipe sideways to flick through tabs
+            // (one tab per ~44dp of travel, with a haptic tick, the icon following the finger).
+            val haptics = LocalHapticFeedback.current
+            val nudge = remember { Animatable(0f) }
+            val scope = rememberCoroutineScope()
             Box(
-                Modifier.size(60.dp).clip(CircleShape).combinedClickable(onClick = onTabs, onLongClick = onTabsLong),
+                Modifier
+                    .size(60.dp)
+                    .pointerInput(Unit) {
+                        val step = 44.dp.toPx()
+                        var acc = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { acc = 0f },
+                            onDragEnd = { scope.launch { nudge.animateTo(0f, spring(dampingRatio = 0.5f)) } },
+                            onDragCancel = { scope.launch { nudge.animateTo(0f) } },
+                        ) { change, dx ->
+                            change.consume()
+                            acc += dx
+                            scope.launch { nudge.snapTo((nudge.value + dx * 0.35f).coerceIn(-18f * density, 18f * density)) }
+                            if (abs(acc) >= step) {
+                                onSwipe(if (acc < 0) 1 else -1)
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                acc = 0f
+                            }
+                        }
+                    }
+                    .clip(CircleShape)
+                    .combinedClickable(onClick = onTabs, onLongClick = onTabsLong),
                 contentAlignment = Alignment.Center,
-            ) { TabsGlyph(tabCount, tint = if (private) cs.onTertiaryContainer else cs.onSurfaceVariant) }
+            ) {
+                TabsGlyph(
+                    tabCount, tint = if (private) cs.onTertiaryContainer else cs.onSurfaceVariant,
+                    modifier = Modifier.offset { IntOffset(nudge.value.roundToInt(), 0) },
+                )
+            }
 
             Box(
                 Modifier

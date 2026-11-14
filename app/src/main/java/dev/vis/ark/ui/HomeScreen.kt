@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -462,3 +463,26 @@ private fun RecentCard() {
 
 @Suppress("unused")
 private val unusedPadding = PaddingValues(0.dp)
+
+/** The homepage from Settings, as a loadable URL — or null when Ark's own home (or the blank one) is in use. */
+fun homepageUrl(): String? =
+    if (Prefs.homeMode == 2 && Prefs.homeUrl.isNotBlank()) dev.vis.ark.browser.Search.resolve(Prefs.homeUrl.trim()) else null
+
+/** Arc-style empty new tab: just the app logo. Tap it (or anywhere) to search. */
+@Composable
+fun BlankHome(onSearch: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(cs.surface)
+            .clickable(interactionSource = null, indication = null, onClick = onSearch),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Just the logo: the adaptive-icon foreground (artwork in the middle of a 108dp canvas).
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(dev.vis.ark.R.drawable.ic_launcher_fg), "Ark",
+            Modifier.requiredSize(180.dp),
+        )
+    }
+}

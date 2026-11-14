@@ -51,6 +51,7 @@ import dev.vis.ark.MainActivity
 import dev.vis.ark.browser.Browser
 import dev.vis.ark.browser.Downloads
 import dev.vis.ark.browser.Req
+import dev.vis.ark.data.Prefs
 import org.mozilla.geckoview.GeckoView
 
 sealed interface Sheet {
@@ -87,8 +88,18 @@ fun ArkRoot(activity: MainActivity) {
     LaunchedEffect(MainActivity.pendingUpdate) {
         if (MainActivity.pendingUpdate) { sheet = null; switcher = false; screen = Screen.Settings; MainActivity.pendingUpdate = false }
     }
-    // Fresh install / no tabs: open straight into search like Arc.
-    LaunchedEffect(Unit) { if (Browser.tabs.isEmpty() && sheet == null) sheet = Sheet.Search() }
+    // New tab: Arc's search sheet, or the homepage when one is set (Settings › Home › Homepage).
+    fun openNew(private: Boolean) {
+        val home = homepageUrl()
+        if (home != null) { sheet = null; Browser.newTab(home, private) } else sheet = Sheet.Search(private = private)
+    }
+    // Fresh install / no tabs: open straight into search like Arc (or load the homepage).
+    LaunchedEffect(Unit) { if (Browser.tabs.isEmpty() && sheet == null && homepageUrl() == null) sheet = Sheet.Search() }
+    // With a homepage set there's no empty home screen: show the page whenever no tab is open.
+    LaunchedEffect(Browser.current == null, switcher, Prefs.homeMode, Prefs.homeUrl) {
+        val home = homepageUrl()
+        if (Browser.current == null && !switcher && home != null) Browser.newTab(home)
+    }
 
     LaunchedEffect(MainActivity.snack) {
         val s = MainActivity.snack ?: return@LaunchedEffect
@@ -106,6 +117,7 @@ fun ArkRoot(activity: MainActivity) {
         c.isAppearanceLightNavigationBars = !dark
     }
 
+    val swipeTarget = remember { arrayOfNulls<Long>(1) }
     fun captureThen(next: () -> Unit) {
         val gv = gecko; val t = Browser.current
         if (gv == null || t == null || gv.session == null) { next(); return }
@@ -180,7 +192,10 @@ fun ArkRoot(activity: MainActivity) {
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (tab == null) HomeScreen(activity, onSearch = { sheet = Sheet.Search() })
+                if (tab == null) {
+                    if (Prefs.homeMode == 1) BlankHome(onSearch = { sheet = Sheet.Search() })
+                    else HomeScreen(activity, onSearch = { sheet = Sheet.Search() })
+                }
                 if (finding && tab != null) FindBar(tab, onClose = { finding = false }, modifier = Modifier.align(Alignment.BottomCenter))
             }
             if (!Browser.fullscreen && !MainActivity.inPip && !(ime && sheet == null && !finding && tab != null)) {
@@ -189,13 +204,19 @@ fun ArkRoot(activity: MainActivity) {
                     tabCount = Browser.tabs.count { it.private == (tab?.private == true) },
                     onTabs = { openSwitcher() },
                     onTabsLong = { tab?.let { Browser.close(it) } },
-                    onNew = { sheet = Sheet.Search(private = tab?.private == true) },
+                    onNew = { openNew(tab?.private == true) },
                     onNewLong = { sheet = Sheet.Search(private = true) },
                     onMenu = { sheet = Sheet.Menu },
                     onSwipe = { dir ->
-                        val list = Browser.tabs.filter { it.private == (tab?.private == true) }
-                        val i = list.indexOfFirst { it.id == Browser.currentId }
-                        list.getOrNull(i + dir)?.let { captureThen { Browser.select(it) } }
+                        // Several steps can fire before the (async) thumbnail capture finishes, so step from
+                        // the tab we're already heading to rather than the one still on screen.
+                        val cur = Browser.current
+                        val list = Browser.tabs.filter { it.private == (cur?.private == true) }
+                        val i = list.indexOfFirst { it.id == (swipeTarget[0] ?: Browser.currentId) }
+                        list.getOrNull(i + dir)?.let { target ->
+                            swipeTarget[0] = target.id
+                            captureThen { Browser.select(target); if (swipeTarget[0] == target.id) swipeTarget[0] = null }
+                        }
                     },
                 )
             }
@@ -209,7 +230,7 @@ fun ArkRoot(activity: MainActivity) {
         ) {
             TabSwitcher(
                 onClose = { switcher = false },
-                onNewTab = { priv -> switcher = false; sheet = Sheet.Search(private = priv) },
+                onNewTab = { priv -> switcher = false; openNew(priv) },
                 onSettings = { switcher = false; screen = Screen.Settings },
             )
         }

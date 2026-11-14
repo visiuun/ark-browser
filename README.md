@@ -74,7 +74,7 @@ Because Ark runs on GeckoView, the things Arc can't do are just... there:
 
 ## Reader tools
 
-- **Summarize** — key points, reading time and topics for any article, computed entirely on your device. No AI service, nothing uploaded.
+- **Summarize** — a real AI summary of any article: a one-line TL;DR, the key points with the names, numbers and dates that matter, and topics. It uses [Pollinations](https://pollinations.ai) (free, open source, no account) and only after you say yes; private tabs never use it. Prefer to keep everything local? Turn it off and Ark picks the key sentences on your device instead.
 - **Translate** — full-page translation using Firefox's on-device translation engine. The page never leaves your phone; language models download once.
 - **Find in page**, per-site **zoom** that's remembered, and a clean **Reader-style** error page.
 
@@ -88,6 +88,8 @@ The new-tab screen is a small dashboard built only from free, open, key-less API
 - Your **pinned sites** and **recent history**.
 
 No account, no API key, no tracking. Place names use [OpenStreetMap Nominatim](https://nominatim.org); search suggestions come from DuckDuckGo and are never sent in private tabs.
+
+Prefer Arc's empty new tab? **Settings › Home › Homepage** switches between this dashboard, **Blank** (just the Ark logo) or **any page** you like.
 
 ## Material 3 Expressive
 
@@ -103,6 +105,7 @@ Ark checks GitHub releases once a day. When a new version is out you get a notif
 - Once a day Ark asks GitHub whether a newer release exists (it sends only the app version). You can turn this off.
 - Enhanced Tracking Protection, HTTPS-only mode, Global Privacy Control and optional encrypted DNS (DNS over HTTPS) are all built in.
 - Private tabs keep no history, cookies or cache.
+- Websites see Firefox's normal user agent with `Ark/<version>` added at the end (like Edge adds `Edg/`). Turn it off in **Settings › Advanced** if a site misbehaves.
 
 ## Compatibility
 

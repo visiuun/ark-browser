@@ -8,6 +8,7 @@ import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
+import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
 
@@ -91,6 +92,17 @@ object Engine {
     }
 
     // ---------------------------------------------------------------- ad blocker (bundled uBlock Origin)
+
+    /**
+     * The user agent websites see: Firefox's own (mobile, or desktop for "Desktop site"),
+     * with "Ark/<version>" appended — the same way Edge adds "Edg/".
+     */
+    fun userAgent(desktop: Boolean): String {
+        val v = org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION.substringBefore('.') + ".0"
+        val base = if (desktop) "Mozilla/5.0 (X11; Linux x86_64; rv:$v) Gecko/20100101 Firefox/$v"
+            else GeckoSession.getDefaultUserAgent()
+        return if (Prefs.uaArk) "$base Ark/${dev.vis.ark.BuildConfig.VERSION_NAME}" else base
+    }
 
     const val UBO_ID = "uBlock0@raymondhill.net"
     private const val UBO_AMO = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"

@@ -176,8 +176,14 @@ object Browser {
         t.session?.settings?.apply {
             setUserAgentMode(if (on) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
             setViewportMode(if (on) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+            setUserAgentOverride(Engine.userAgent(on))
         }
         t.session?.reload()
+    }
+
+    /** Re-applies the user agent to every open tab (after the Ark-in-user-agent setting changes). */
+    fun applyUserAgent() {
+        tabs.forEach { t -> t.session?.settings?.setUserAgentOverride(Engine.userAgent(t.desktop)) }
     }
 
     fun setZoom(t: Tab, z: Float) {
@@ -231,6 +237,7 @@ object Browser {
             .suspendMediaWhenInactive(false)
             .userAgentMode(if (t.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
             .viewportMode(if (t.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
+            .userAgentOverride(Engine.userAgent(t.desktop))
             .build()
         val s = GeckoSession(settings)
         t.trackingProtection = Prefs.etp != 0
@@ -481,7 +488,7 @@ object Browser {
         }
         val esc = { s: String -> s.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;") }
         val html = """
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
 <style>
 :root{--bg:#fff8f8;--fg:#22191c;--mut:#6f5a60;--acc:#8e3f63;--chip:#ffd8e6}
 @media(prefers-color-scheme:dark){:root{--bg:#000;--fg:#f0dee3;--mut:#d3c1c6;--acc:#ffb0cf;--chip:#3a2530}}
@@ -494,6 +501,6 @@ code{display:block;word-break:break-all;color:var(--mut);font-size:13px;margin:1
 a{display:inline-block;background:var(--acc);color:var(--bg);padding:16px 28px;border-radius:999px;text-decoration:none;font-weight:700;font-size:16px}
 </style></head><body><main><div class="blob">⚠︎</div><h1>${esc(title)}</h1><p>${esc(desc)}</p>
 <code>${esc(uri)} · error ${error.code}</code><a href="${esc(uri)}">Try again</a></main></body></html>"""
-        return "data:text/html;base64," + Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
+        return "data:text/html;charset=utf-8;base64," + Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
     }
 }

@@ -37,17 +37,47 @@
     port.postMessage({ type: "meta", theme, icon, url: location.href });
   };
 
-  const extract = () => {
-    const root = document.querySelector("article") || document.querySelector("main") || document.body;
-    const clone = root.cloneNode(true);
-    clone.querySelectorAll("script,style,noscript,nav,footer,header,aside,form,svg,iframe,button").forEach(n => n.remove());
-    const parts = [];
-    clone.querySelectorAll("h1,h2,h3,p,li,blockquote,pre,td").forEach(n => {
-      const t = (n.innerText || n.textContent || "").trim();
-      if (t) parts.push(t);
+  // Readability-lite: find the element holding the most real paragraph text, then read only that.
+  const JUNK = "script,style,noscript,nav,footer,header,aside,form,svg,iframe,button,dialog,[role=navigation],[role=banner],[role=contentinfo],[role=complementary],[aria-hidden=true],.comments,#comments,.related,.share,.newsletter,.cookie,.advert,.ad";
+  const linkDensity = (el) => {
+    const len = (el.innerText || "").length || 1;
+    let l = 0; el.querySelectorAll("a").forEach(a => l += (a.innerText || "").length);
+    return l / len;
+  };
+  const pickRoot = () => {
+    const explicit = document.querySelector("article [itemprop=articleBody], [itemprop=articleBody], article, main, [role=main]");
+    const scores = new Map();
+    document.querySelectorAll("p").forEach(p => {
+      const t = (p.innerText || "").trim();
+      if (t.length < 60 || linkDensity(p) > 0.5 || p.closest(JUNK)) return;
+      const add = (el, w) => { if (el) scores.set(el, (scores.get(el) || 0) + t.length * w); };
+      add(p.parentElement, 1); add(p.parentElement && p.parentElement.parentElement, 0.5);
     });
-    const text = parts.length ? parts.join("\n") : (root.innerText || "");
-    const headings = [...document.querySelectorAll("h1,h2,h3")].map(h => h.innerText.trim()).filter(Boolean).slice(0, 12);
+    let best = null, bestScore = 0;
+    scores.forEach((v, el) => { if (v > bestScore) { best = el; bestScore = v; } });
+    if (explicit && (!best || explicit.contains(best) || (explicit.innerText || "").length < 20000)) {
+      const inside = best && explicit.contains(best);
+      return inside || !best ? explicit : best;
+    }
+    return best || explicit || document.body;
+  };
+
+  const extract = () => {
+    const root = pickRoot();
+    const clone = root.cloneNode(true);
+    clone.querySelectorAll(JUNK).forEach(n => n.remove());
+    const parts = [];
+    const h1 = document.querySelector("h1");
+    if (h1 && !root.contains(h1)) parts.push(h1.innerText.trim());
+    clone.querySelectorAll("h1,h2,h3,h4,p,li,blockquote,pre,figcaption,td").forEach(n => {
+      if (n.tagName === "LI" && (n.querySelector("p") || linkDensity(n) > 0.6)) return;
+      if (n.tagName === "TD" && (n.innerText || "").length < 30) return;
+      const t = (n.innerText || n.textContent || "").replace(/\s+/g, " ").trim();
+      if (t.length > 1) parts.push(t);
+    });
+    let text = parts.join("\n");
+    if (text.length < 400) text = (root.innerText || document.body.innerText || "");
+    const headings = [...root.querySelectorAll("h1,h2,h3")].map(h => h.innerText.trim()).filter(Boolean).slice(0, 12);
     port.postMessage({ type: "text", text: text.slice(0, 200000), headings, links: document.links.length, lang: document.documentElement.lang || "" });
   };
 

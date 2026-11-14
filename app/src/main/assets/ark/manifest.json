@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Ark helper",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Built-in helper for the Ark browser (page zoom, theme color, page text).",
   "browser_specific_settings": { "gecko": { "id": "ark-helper@vis.dev" } },
   "content_scripts": [
