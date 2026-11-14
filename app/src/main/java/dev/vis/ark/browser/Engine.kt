@@ -104,10 +104,15 @@ object Engine {
         ctrl.list().accept { list ->
             val ext = list?.firstOrNull { it.id == UBO_ID }
             if (ext == null) { installBundledUbo(ctx); return@accept }
+            if (!ext.metaData.enabled) ctrl.enable(ext, WebExtensionController.EnableSource.USER).accept({ refreshExtensions() }, { })
             if (!ext.metaData.allowedInPrivateBrowsing) ctrl.setAllowedInPrivateBrowsing(ext, true)
             val now = System.currentTimeMillis()
             if (now - (Prefs.adBlockChecked.toLongOrNull() ?: 0L) > 24 * 3600_000L) {
-                ctrl.update(ext).accept({ Prefs.adBlockChecked = now.toString(); refreshExtensions() }, { })
+                ctrl.update(ext).accept({
+                    Prefs.adBlockChecked = now.toString()
+                    // An update reloads the add-on; read its state again once it has settled.
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ refreshExtensions() }, 5_000)
+                }, { })
             }
         }
     }
@@ -165,9 +170,9 @@ object Engine {
         1 -> GeckoRuntimeSettings.COLOR_SCHEME_LIGHT
         2 -> GeckoRuntimeSettings.COLOR_SCHEME_DARK
         else -> when (Prefs.themeMode) {
-            1 -> if (Prefs.oled) GeckoRuntimeSettings.COLOR_SCHEME_DARK else GeckoRuntimeSettings.COLOR_SCHEME_LIGHT
+            1 -> GeckoRuntimeSettings.COLOR_SCHEME_LIGHT
             2 -> GeckoRuntimeSettings.COLOR_SCHEME_DARK
-            else -> if (Prefs.oled) GeckoRuntimeSettings.COLOR_SCHEME_DARK else GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM
+            else -> GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM
         }
     }
 

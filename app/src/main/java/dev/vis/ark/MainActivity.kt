@@ -126,6 +126,34 @@ class MainActivity : ComponentActivity(), Host {
         Browser.saveNow()
     }
 
+    /** Whether Ark currently handles web links. Refreshed every time the app comes back to the foreground. */
+    var isDefaultBrowser by mutableStateOf(false)
+        private set
+
+    override fun onResume() {
+        super.onResume()
+        isDefaultBrowser = checkDefaultBrowser()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 7) isDefaultBrowser = checkDefaultBrowser()
+    }
+
+    private fun checkDefaultBrowser(): Boolean {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val rm = getSystemService(android.app.role.RoleManager::class.java)
+            if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER) && rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) return true
+        }
+        // Some OEM settings apps change the default without going through RoleManager, so also ask the resolver.
+        val probe = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE)
+        val info = if (Build.VERSION.SDK_INT >= 33)
+            packageManager.resolveActivity(probe, android.content.pm.PackageManager.ResolveInfoFlags.of(android.content.pm.PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+        else @Suppress("DEPRECATION") packageManager.resolveActivity(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        return info?.activityInfo?.packageName == packageName
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (Engine.isReady) Engine.runtime.configurationChanged(newConfig)

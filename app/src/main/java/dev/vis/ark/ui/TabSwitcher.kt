@@ -96,11 +96,7 @@ fun TabSwitcher(onClose: () -> Unit, onNewTab: (Boolean) -> Unit, onSettings: ()
                         Text("Private · $privCount")
                     }
                 }
-                if (list.isNotEmpty()) IconButton(onClick = {
-                    val n = list.size
-                    Browser.closeAll(privateMode)
-                    Browser.host?.snack("Closed $n tabs")
-                }) { MIcon(Sym.DeleteSweep, "Close all") }
+                IconButton(onClick = onSettings) { MIcon(Sym.Settings, "Settings") }
             }
 
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -148,18 +144,29 @@ fun TabSwitcher(onClose: () -> Unit, onNewTab: (Boolean) -> Unit, onSettings: ()
                 }
             }
 
-            // Bottom bar: view mode · new tab · settings (Arc's switcher layout)
+            // Bottom bar: view mode · new tab · clear all (Arc's switcher layout)
             Row(
-                Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 26.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
+                Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { grid = !grid }, modifier = Modifier.size(60.dp)) {
-                    MIcon(if (grid) Sym.ViewCarousel else Sym.GridView, "View", Modifier.size(32.dp))
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    IconButton(onClick = { grid = !grid }, modifier = Modifier.size(56.dp)) {
+                        MIcon(if (grid) Sym.ViewCarousel else Sym.GridView, if (grid) "Card view" else "Grid view", Modifier.size(28.dp))
+                    }
                 }
                 Surface(onClick = { onNewTab(privateMode) }, shape = CircleShape, color = cs.surfaceContainerHighest, modifier = Modifier.width(118.dp).height(58.dp)) {
-                    Box(contentAlignment = Alignment.Center) { MIcon(Sym.Add, "New tab", Modifier.size(34.dp)) }
+                    Box(contentAlignment = Alignment.Center) { MIcon(Sym.Add, "New tab", Modifier.size(30.dp)) }
                 }
-                IconButton(onClick = onSettings, modifier = Modifier.size(60.dp)) { MIcon(Sym.Settings, "Settings", Modifier.size(32.dp)) }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    androidx.compose.material3.TextButton(
+                        enabled = list.isNotEmpty(),
+                        onClick = {
+                            val n = list.size
+                            Browser.closeAll(privateMode)
+                            Browser.host?.snack(if (n == 1) "Closed 1 tab" else "Closed $n tabs")
+                        },
+                    ) { Text("Clear", style = MaterialTheme.typography.titleMedium) }
+                }
             }
         }
     }

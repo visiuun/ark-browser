@@ -24,7 +24,7 @@ Ark embeds and builds on third-party software under their own licenses:
   - uBlock Origin, bundled as the ad blocker      GPL 3.0
       Raymond Hill and contributors, unmodified, redistributed under GPL 3.0.
       Source: https://github.com/gorhill/uBlock
-  - Material Symbols (icon font)                   Apache 2.0
+  - Material Symbols (icons)                       Apache 2.0
 
 These components remain under their respective licenses. The CC BY-NC 4.0
 terms above apply to the Ark application code in this repository.

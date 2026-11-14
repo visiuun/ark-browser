@@ -61,8 +61,8 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
                     if (tab?.isSecure == true) MIcon(Sym.Lock, null, Modifier.size(15.dp), tint = cs.onSurfaceVariant)
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        if (tab == null) "Search or type URL" else tab.host.ifBlank { tab.url },
-                        style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.StartEllipsis, textAlign = TextAlign.Center,
+                        if (tab == null) "Search" else tab.host.ifBlank { tab.url },
+                        style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = if (tab == null) TextOverflow.Ellipsis else TextOverflow.StartEllipsis, textAlign = TextAlign.Center,
                     )
                 }
                 IconButton(onClick = {

@@ -48,7 +48,6 @@ private fun ColorScheme.oled() = copy(
 
 @Composable
 fun isAppDark(): Boolean = when {
-    Prefs.oled -> true
     Prefs.themeMode == 1 -> false
     Prefs.themeMode == 2 -> true
     else -> isSystemInDarkTheme()

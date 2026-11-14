@@ -102,10 +102,19 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
     var clearDialog by remember { mutableStateOf(false) }
     val cs = MaterialTheme.colorScheme
     fun apply() = Engine.applySettings()
+    LaunchedEffect(Unit) { Engine.refreshExtensions() }
 
     FullScreen("Settings", onBack) {
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 48.dp), modifier = Modifier.navigationBarsPadding()) {
-            item {
+            if (activity.isDefaultBrowser) item {
+                Surface(onClick = { activity.openDefaultBrowserSettings() }, shape = RoundedCornerShape(32.dp), color = cs.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        MIcon(Sym.Check, null, tint = cs.primary)
+                        Spacer(Modifier.width(14.dp))
+                        Text("Ark is your default browser", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            } else item {
                 Surface(onClick = { activity.openDefaultBrowserSettings() }, shape = RoundedCornerShape(32.dp), color = cs.primaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(52.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.primary), contentAlignment = Alignment.Center) {
@@ -122,15 +131,15 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
 
             item { SectionLabel("Appearance") }
             item {
-                ChoiceGroup("Theme", listOf("System", "Light", "Dark"), if (Prefs.oled) 2 else Prefs.themeMode, enabled = !Prefs.oled, index = 0, count = 4) {
+                ChoiceGroup("Theme", listOf("System", "Light", "Dark"), Prefs.themeMode, index = 0, count = 4) {
                     Prefs.themeMode = it; apply()
                 }
             }
-            item { ToggleRow("OLED black", Prefs.oled, 1, 4, "Pure black surfaces — saves battery on OLED screens") { Prefs.oled = it; apply() } }
+            item { ToggleRow("OLED black", Prefs.oled, 1, 4, "Pure black in dark mode — saves battery on OLED screens") { Prefs.oled = it; apply() } }
             item {
                 ToggleRow("Dynamic color", Prefs.dynamicColor, 2, 4, "Match your wallpaper (Material You)", enabled = Build.VERSION.SDK_INT >= 31) { Prefs.dynamicColor = it }
             }
-            item { ChoiceGroup("Websites", listOf("Follow app", "Light", "Dark"), Prefs.webTheme, index = 3, count = 4) { Prefs.webTheme = it; apply() } }
+            item { ChoiceGroup("Websites", listOf("Auto", "Light", "Dark"), Prefs.webTheme, index = 3, count = 4) { Prefs.webTheme = it; apply() } }
             item {
                 SettingBlock("Text size · ${(Prefs.fontScale * 100).toInt()}%", 0, 1) {
                     Slider(value = Prefs.fontScale, onValueChange = { Prefs.fontScale = (Math.round(it * 20) / 20f) }, onValueChangeFinished = { apply() }, valueRange = 0.7f..1.8f)
@@ -142,12 +151,13 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             item { ToggleRow("Search suggestions", Prefs.suggestions, 1, 2, "From DuckDuckGo autocomplete; never in private tabs") { Prefs.suggestions = it } }
 
             item { SectionLabel("Home") }
-            item { ToggleRow("Weather", Prefs.homeWeather, 0, 6, "Open-Meteo, no account needed") { Prefs.homeWeather = it } }
-            item { TextRow("Weather city", Prefs.weatherCity, "Leave empty to use your location", 1, 6) { Prefs.weatherCity = it } }
-            item { ToggleRow("Fahrenheit", Prefs.fahrenheit, 2, 6) { Prefs.fahrenheit = it } }
-            item { ToggleRow("Wikipedia", Prefs.homeWiki, 3, 6, "Featured article, news, on this day") { Prefs.homeWiki = it } }
-            item { ToggleRow("Hacker News", Prefs.homeHN, 4, 6) { Prefs.homeHN = it } }
-            item { ToggleRow("Recently visited", Prefs.homeRecent, 5, 6) { Prefs.homeRecent = it } }
+            item { ChoiceGroup("Clock", listOf("System", "12-hour", "24-hour"), Prefs.clock, index = 0, count = 7) { Prefs.clock = it } }
+            item { ToggleRow("Weather", Prefs.homeWeather, 1, 7, "Open-Meteo, no account needed") { Prefs.homeWeather = it } }
+            item { TextRow("Weather city", Prefs.weatherCity, "Leave empty to use your location", 2, 7) { Prefs.weatherCity = it } }
+            item { ToggleRow("Fahrenheit", Prefs.fahrenheit, 3, 7) { Prefs.fahrenheit = it } }
+            item { ToggleRow("Wikipedia", Prefs.homeWiki, 4, 7, "Featured article, news, on this day") { Prefs.homeWiki = it } }
+            item { ToggleRow("Hacker News", Prefs.homeHN, 5, 7) { Prefs.homeHN = it } }
+            item { ToggleRow("Recently visited", Prefs.homeRecent, 6, 7) { Prefs.homeRecent = it } }
 
             item { SectionLabel("Ad blocker") }
             item {
@@ -318,7 +328,7 @@ private fun TextRow(title: String, value: String, hint: String, index: Int, coun
     var v by remember { mutableStateOf(value) }
     SettingBlock(title, index, count) {
         OutlinedTextField(
-            v, { v = it }, placeholder = { Text(hint) }, singleLine = true, shape = CircleShape,
+            v, { v = it }, placeholder = { Text(hint, maxLines = 1, overflow = TextOverflow.Ellipsis) }, singleLine = true, shape = RoundedCornerShape(16.dp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onChange(v.trim()) }),
             trailingIcon = { if (v.trim() != value) TextButton({ onChange(v.trim()) }) { Text("Save") } },

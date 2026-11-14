@@ -1,6 +1,6 @@
 package dev.vis.ark.ui
 
-/** Material Symbols Rounded glyphs (codepoints into res/font/material_symbols.ttf). */
+/** Material Symbols Rounded glyphs, by codepoint. Vector outlines live in SymPaths.kt. */
 object Sym {
     const val Add = "\uE145" // add
     const val AddToHomeScreen = "\uF2B9" // add_to_home_screen
@@ -56,5 +56,8 @@ object Sym {
     const val VisibilityOff = "\uF5E4" // domino_mask
     const val WaterDrop = "\uE798" // water_drop
     const val WbSunny = "\uE430" // wb_sunny
+    const val WbTwilight = "\uE1C6" // wb_twilight
+    const val Bedtime = "\uF159" // bedtime
+    const val Schedule = "\uE8B5" // schedule
     const val ZoomOutMap = "\uE56B" // zoom_out_map
 }

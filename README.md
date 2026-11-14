@@ -118,7 +118,7 @@ Requires JDK 17 and the Android SDK (compileSdk 37). A shared signing key is inc
 
 - [Mozilla GeckoView](https://mozilla.github.io/geckoview/) — the Firefox web engine (MPL 2.0)
 - [uBlock Origin](https://github.com/gorhill/uBlock) by Raymond Hill — bundled ad blocker (GPL 3.0)
-- [Material Symbols](https://fonts.google.com/icons) — icon font (Apache 2.0)
+- [Material Symbols](https://fonts.google.com/icons) — icons (Apache 2.0)
 - Data: Open-Meteo, OpenStreetMap, Wikipedia, Hacker News
 
 ## License

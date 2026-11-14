@@ -66,6 +66,7 @@ object Prefs {
     var homeHN by Pref("homeHN", true)
     var homeRecent by Pref("homeRecent", true)
     var fahrenheit by Pref("fahrenheit", false)
+    var clock by Pref("clock", 0)                  // 0 follow system, 1 12-hour, 2 24-hour
     var weatherCity by Pref("weatherCity", "")
     var wikiLang by Pref("wikiLang", "en")
 

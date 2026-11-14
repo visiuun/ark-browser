@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
@@ -136,16 +137,15 @@ fun SearchSheetContent(
             items(Prefs.pins, key = { it.url }) { pin ->
                 val host = android.net.Uri.parse(pin.url).host?.removePrefix("www.") ?: pin.url
                 Surface(
-                    shape = RoundedCornerShape(30.dp), color = cs.surfaceContainerHighest,
-                    modifier = Modifier.size(width = 150.dp, height = 140.dp).combinedClickable(
+                    shape = RoundedCornerShape(22.dp), color = cs.surfaceContainerHighest,
+                    modifier = Modifier.size(width = 136.dp, height = 84.dp).combinedClickable(
                         onClick = { go(pin.url) },
                         onLongClick = { Prefs.removePin(pin); Browser.host?.snack("Unpinned ${pin.title}") },
                     ),
                 ) {
-                    Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        Favicon(Net.faviconFor(host), host, 44.dp, container = cs.surfaceContainerLow)
-                        Spacer(Modifier.height(12.dp))
-                        Text(pin.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                        Favicon(Net.faviconFor(host), host, 28.dp, container = cs.surfaceContainerLow)
+                        Text(pin.title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

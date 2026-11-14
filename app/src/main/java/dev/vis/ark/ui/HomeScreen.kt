@@ -106,8 +106,20 @@ fun HomeScreen(activity: MainActivity, onSearch: () -> Unit) {
             color = cs.primary,
         )
         Text(greeting, style = MaterialTheme.typography.displayMedium, modifier = Modifier.padding(top = 4.dp))
+        val h24 = use24h()
+        val clock = remember(now, h24) {
+            androidx.compose.ui.text.buildAnnotatedString {
+                if (h24) append(now.format(DateTimeFormatter.ofPattern("HH:mm")))
+                else {
+                    append(now.format(DateTimeFormatter.ofPattern("h:mm")))
+                    pushStyle(androidx.compose.ui.text.SpanStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold))
+                    append(" " + now.format(DateTimeFormatter.ofPattern("a", java.util.Locale.getDefault())))
+                    pop()
+                }
+            }
+        }
         Text(
-            now.format(DateTimeFormatter.ofPattern("HH:mm")), style = MaterialTheme.typography.displayLarge.copy(fontSize = 88.sp, lineHeight = 92.sp),
+            clock, style = MaterialTheme.typography.displayLarge.copy(fontSize = 88.sp, lineHeight = 92.sp),
             fontWeight = FontWeight.Black, color = cs.onSurface.copy(alpha = 0.92f),
         )
         Spacer(Modifier.height(16.dp))
@@ -135,7 +147,7 @@ fun HomeScreen(activity: MainActivity, onSearch: () -> Unit) {
                         ).padding(vertical = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Favicon(Net.faviconFor(host), host, 62.dp, shape = shapes[i % shapes.size].toShape(), container = if (i % 2 == 0) cs.primaryContainer else cs.tertiaryContainer)
+                        Favicon(Net.faviconFor(host), host, 52.dp, shape = shapes[i % shapes.size].toShape(), container = if (i % 2 == 0) cs.primaryContainer else cs.tertiaryContainer)
                         Spacer(Modifier.height(8.dp))
                         Text(pin.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -254,10 +266,16 @@ private fun WeatherBody(w: Net.Weather) {
             ) { Text(weatherEmoji(w.code, w.isDay), fontSize = 46.sp) }
         }
         Spacer(Modifier.height(14.dp))
+        val h24 = use24h()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Stat(Sym.WaterDrop, "${w.humidity}%", "Humidity", Modifier.weight(1f))
             Stat(Sym.Air, "${w.wind.roundToInt()} ${if (w.unit == "°F") "mph" else "km/h"}", "Wind", Modifier.weight(1f))
-            Stat(Sym.WbSunny, "UV ${w.uv.roundToInt()}", "${w.sunrise}–${w.sunset}", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Stat(Sym.WbSunny, "${w.uv.roundToInt()}", "UV index", Modifier.weight(1f))
+            if (w.isDay) Stat(Sym.WbTwilight, formatTime(w.sunset, h24), "Sunset", Modifier.weight(1f))
+            else Stat(Sym.Bedtime, formatTime(w.sunrise, h24), "Sunrise", Modifier.weight(1f))
         }
         Spacer(Modifier.height(14.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -266,7 +284,7 @@ private fun WeatherBody(w: Net.Weather) {
                     Modifier.clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainerHigh).padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(h.time, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                    Text(formatTime(h.time, h24, compact = true), style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
                     Text(weatherEmoji(h.code, true), fontSize = 20.sp)
                     Text("${h.temp.roundToInt()}°", style = MaterialTheme.typography.labelLarge)
                 }
