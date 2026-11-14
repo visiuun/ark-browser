@@ -89,6 +89,7 @@ object Prefs {
     var fontScale by Pref("fontScale", 1f)
     var remoteDebugging by Pref("remoteDebugging", false)
     var uaArk by Pref("uaArk", true)                // append "Ark/<version>" to the user agent
+    var autoHideBar by Pref("autoHideBar", false)  // slide the bottom bar away while scrolling down a page
     var aiSummary by Pref("aiSummary", 0)          // 0 ask, 1 use AI (Pollinations), 2 on-device only
 
     // Tabs

@@ -44,6 +44,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.layout.layout
+import kotlin.math.roundToInt
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.scale
 import androidx.core.view.WindowCompat
@@ -169,6 +176,22 @@ fun ArkRoot(activity: MainActivity) {
         }
     }
 
+    // Settings › Appearance › "Hide bar while scrolling": the page runs underneath the bottom bar (GeckoView's
+    // dynamic toolbar), and the bar slides away as you scroll down and comes back when you scroll up.
+    val barShown = !Browser.fullscreen && !MainActivity.inPip && !(ime && sheet == null && !finding && tab != null)
+    val collapsible = Prefs.autoHideBar && barShown
+    val barPx = remember { mutableIntStateOf(0) }
+    val hide = animateFloatAsState(
+        if (collapsible && tab != null && Browser.barHidden && sheet == null && !finding && !switcher && screen == Screen.None) 1f else 0f,
+        tween(240, easing = FastOutSlowInEasing), label = "barHide",
+    )
+    LaunchedEffect(gecko, collapsible, barPx.intValue) {
+        val gv = gecko ?: return@LaunchedEffect
+        gv.setDynamicToolbarMaxHeight(if (collapsible) barPx.intValue else 0)
+        if (!collapsible) { gv.setVerticalClipping(0); return@LaunchedEffect }
+        snapshotFlow { (barPx.intValue * hide.value.coerceIn(0f, 1f)).roundToInt() }.collect { gv.setVerticalClipping(-it) }
+    }
+
     androidx.compose.material3.Surface(color = cs.surface, contentColor = cs.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().imePadding()) {
@@ -190,7 +213,14 @@ fun ArkRoot(activity: MainActivity) {
                             v.visibility = View.INVISIBLE
                         }
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    // While the bar can hide, GeckoView keeps one constant size reaching under the bar (no reflow
+                    // per animation frame); the part the bar covers is reported through vertical clipping.
+                    modifier = Modifier.fillMaxSize().layout { m, c ->
+                        val extra = if (collapsible) (barPx.intValue * (1f - hide.value.coerceIn(0f, 1f))).roundToInt() else 0
+                        val h = c.maxHeight + extra
+                        val p = m.measure(c.copy(minHeight = h, maxHeight = h))
+                        layout(c.maxWidth, c.maxHeight) { p.place(0, 0) }
+                    },
                 )
                 if (tab == null) {
                     if (Prefs.homeMode == 1) BlankHome(onSearch = { sheet = Sheet.Search() })
@@ -198,8 +228,10 @@ fun ArkRoot(activity: MainActivity) {
                 }
                 if (finding && tab != null) FindBar(tab, onClose = { finding = false }, modifier = Modifier.align(Alignment.BottomCenter))
             }
-            if (!Browser.fullscreen && !MainActivity.inPip && !(ime && sheet == null && !finding && tab != null)) {
+            if (barShown) {
                 BottomBar(
+                    hidden = { hide.value },
+                    onBarHeight = { barPx.intValue = it },
                     tab = tab,
                     tabCount = Browser.tabs.count { it.private == (tab?.private == true) },
                     onTabs = { openSwitcher() },

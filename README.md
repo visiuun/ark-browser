@@ -49,7 +49,7 @@ Setup      Install Ark.apk and open it. Optionally set it as your default browse
 
 The chrome is deliberately identical to Arc Search: a three-button bottom bar (tabs · new tab · menu), the same rounded menu sheet that slides up with a URL pill and a row of big action tiles, and the same full-screen new-tab search with pinned sites. The difference is underneath — it's a full browser.
 
-- **Bottom bar** — tap for tabs, new tab and the menu. Swipe up for the menu, swipe left/right to flick between tabs, long-press for a private tab.
+- **Bottom bar** — tap for tabs, new tab and the menu. Swipe up for the menu, swipe left/right to flick between tabs, long-press for a private tab. Optionally slides out of the way while you scroll down a page and comes back when you scroll up (Settings › Appearance).
 - **Menu sheet** — Summarize · Pin · Find · Share across the top, then Translate, Zoom, Desktop Site, Site Settings, and quick tiles for History, Downloads, Add-ons, Settings, Private, Home screen, PDF and Print.
 - **Tab switcher** — a swipeable card deck with live page previews, plus a grid view and a separate private space.
 

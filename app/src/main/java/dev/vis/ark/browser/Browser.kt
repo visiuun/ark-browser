@@ -81,6 +81,30 @@ object Browser {
     /** Bumped when a session becomes ready to attach to the GeckoView. */
     var viewEpoch by mutableIntStateOf(0)
 
+    /** The page asked the bottom bar to get out of the way (scrolling down); only honoured with Prefs.autoHideBar. */
+    var barHidden by mutableStateOf(false)
+    private var scrollTab = -1L
+    private var scrollLast = 0
+    private var scrollRun = 0
+
+    fun showBar() { barHidden = false; scrollRun = 0 }
+
+    /** Scrolling down hides the bar, scrolling back up (or reaching the top) brings it back. */
+    private fun onScroll(t: Tab, y: Int) {
+        if (t.id != currentId) return
+        if (scrollTab != t.id) { scrollTab = t.id; scrollLast = y; scrollRun = 0; return }
+        val dy = y - scrollLast
+        scrollLast = y
+        if (dy == 0) return
+        if ((dy > 0) != (scrollRun > 0)) scrollRun = 0
+        scrollRun += dy
+        when {
+            y <= 24 -> barHidden = false
+            scrollRun > 48 -> barHidden = true
+            scrollRun < -48 -> barHidden = false
+        }
+    }
+
     private var nextId = System.currentTimeMillis()
     private var initialized = false
 
@@ -126,6 +150,7 @@ object Browser {
         val old = current
         if (old != null && old !== t) old.session?.takeIf { it.isOpen }?.let { it.setActive(false); it.setFocused(false) }
         currentId = t?.id
+        showBar()
         if (t != null) {
             t.lastUsed = System.currentTimeMillis()
             val s = ensureSession(t)
@@ -280,10 +305,15 @@ object Browser {
                 GeckoResult.fromValue(errorPage(uri ?: "", error))
         }
 
+        s.scrollDelegate = object : GeckoSession.ScrollDelegate {
+            override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) { onScroll(t, scrollY) }
+        }
+
         s.progressDelegate = object : ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 t.loading = true; t.progress = 8; t.blockedCount = 0; t.blockedHosts.clear(); t.offerTranslate = false
                 t.translation = null
+                if (t.id == currentId) { showBar(); scrollTab = -1L }
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {

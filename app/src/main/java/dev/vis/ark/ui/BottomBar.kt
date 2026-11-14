@@ -44,6 +44,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import dev.vis.ark.browser.Tab
 import kotlin.math.abs
 
@@ -57,6 +61,8 @@ fun BottomBar(
     onNewLong: () -> Unit,
     onMenu: () -> Unit,
     onSwipe: (Int) -> Unit,
+    hidden: () -> Float = { 0f },
+    onBarHeight: (Int) -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val private = tab?.private == true
@@ -77,8 +83,21 @@ fun BottomBar(
             }
             .navigationBarsPadding()
     ) {
-        // Top edge: an expressive wavy progress bar, only while the page is loading (space kept so nothing jumps).
-        Box(Modifier.fillMaxWidth().height(10.dp), contentAlignment = Alignment.Center) {
+      // Slides down behind the navigation bar as `hidden` goes 0 → 1: the bar is laid out at full height and
+      // this box reports (and clips to) only the part still showing.
+      Box(
+        Modifier
+            .clipToBounds()
+            .layout { m, c ->
+                val p = m.measure(c.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+                val visible = (p.height * (1f - hidden().coerceIn(0f, 1f))).roundToInt()
+                layout(p.width, visible) { p.place(0, 0) }
+            }
+      ) {
+       Box(Modifier.fillMaxWidth().onSizeChanged { onBarHeight(it.height) }) {
+        // Top edge: an expressive wavy progress bar, only while the page is loading. It floats over the
+        // row's top margin, so the buttons stay vertically centred in the bar.
+        Box(Modifier.fillMaxWidth().height(10.dp).align(Alignment.TopCenter), contentAlignment = Alignment.Center) {
             androidx.compose.animation.AnimatedVisibility(visible = tab?.loading == true, enter = fadeIn(), exit = fadeOut()) {
                 if (tab != null) LinearWavyProgressIndicator(
                     progress = { (tab.progress / 100f).coerceIn(0.05f, 1f) },
@@ -88,7 +107,7 @@ fun BottomBar(
             }
         }
         Row(
-            Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 26.dp),
+            Modifier.fillMaxWidth().height(82.dp).padding(horizontal = 26.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -142,5 +161,7 @@ fun BottomBar(
                 contentAlignment = Alignment.Center,
             ) { MIcon(Sym.KeyboardArrowUp, "Menu", Modifier.size(36.dp), tint = if (private) cs.onTertiaryContainer else cs.onSurface) }
         }
+       }
+      }
     }
 }

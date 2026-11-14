@@ -143,15 +143,16 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
 
             item { SectionLabel("Appearance") }
             item {
-                ChoiceGroup("Theme", listOf("System", "Light", "Dark"), Prefs.themeMode, index = 0, count = 4) {
+                ChoiceGroup("Theme", listOf("System", "Light", "Dark"), Prefs.themeMode, index = 0, count = 5) {
                     Prefs.themeMode = it; apply()
                 }
             }
-            item { ToggleRow("OLED black", Prefs.oled, 1, 4, "Pure black in dark mode — saves battery on OLED screens") { Prefs.oled = it; apply() } }
+            item { ToggleRow("OLED black", Prefs.oled, 1, 5, "Pure black in dark mode — saves battery on OLED screens") { Prefs.oled = it; apply() } }
             item {
-                ToggleRow("Dynamic color", Prefs.dynamicColor, 2, 4, "Match your wallpaper (Material You)", enabled = Build.VERSION.SDK_INT >= 31) { Prefs.dynamicColor = it }
+                ToggleRow("Dynamic color", Prefs.dynamicColor, 2, 5, "Match your wallpaper (Material You)", enabled = Build.VERSION.SDK_INT >= 31) { Prefs.dynamicColor = it }
             }
-            item { ChoiceGroup("Websites", listOf("Auto", "Light", "Dark"), Prefs.webTheme, index = 3, count = 4) { Prefs.webTheme = it; apply() } }
+            item { ChoiceGroup("Websites", listOf("Auto", "Light", "Dark"), Prefs.webTheme, index = 3, count = 5) { Prefs.webTheme = it; apply() } }
+            item { ToggleRow("Hide bar while scrolling", Prefs.autoHideBar, 4, 5, "Slides away as you scroll down a page, back when you scroll up") { Prefs.autoHideBar = it } }
             item {
                 SettingBlock("Text size · ${(Prefs.fontScale * 100).toInt()}%", 0, 1) {
                     Slider(value = Prefs.fontScale, onValueChange = { Prefs.fontScale = (Math.round(it * 20) / 20f) }, onValueChangeFinished = { apply() }, valueRange = 0.7f..1.8f)
