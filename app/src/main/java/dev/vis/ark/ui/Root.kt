@@ -83,6 +83,10 @@ fun ArkRoot(activity: MainActivity) {
             MainActivity.pendingSearch = null
         }
     }
+    // "Update available" notification → Settings, where the update card lives.
+    LaunchedEffect(MainActivity.pendingUpdate) {
+        if (MainActivity.pendingUpdate) { sheet = null; switcher = false; screen = Screen.Settings; MainActivity.pendingUpdate = false }
+    }
     // Fresh install / no tabs: open straight into search like Arc.
     LaunchedEffect(Unit) { if (Browser.tabs.isEmpty() && sheet == null) sheet = Sheet.Search() }
 

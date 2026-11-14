@@ -90,6 +90,8 @@ object Prefs {
     // Tabs
     var restoreTabs by Pref("restoreTabs", true)
     var askedNotifications by Pref("askedNotifications", false)
+    var autoUpdate by Pref("autoUpdate", true)
+    var updateLastCheck by Pref("updateLastCheck", "0")
 
     // Raw storage helpers
     fun getString(key: String): String? = sp.getString(key, null)

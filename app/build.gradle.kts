@@ -13,8 +13,9 @@ android {
         applicationId = "dev.vis.ark"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
+        buildConfigField("String", "UPDATE_REPO", "\"visiuun/ark-browser\"")
     }
 
     flavorDimensions += "abi"

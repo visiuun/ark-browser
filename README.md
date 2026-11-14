@@ -93,9 +93,14 @@ No account, no API key, no tracking. Place names use [OpenStreetMap Nominatim](h
 
 The whole UI is built on Google's Material 3 Expressive — connected button groups, spring motion, expressive shapes, wavy progress. It follows your wallpaper colours (Material You) on Android 12+, with light, dark, system and a dedicated **OLED true-black** theme.
 
+## Updates
+
+Ark checks GitHub releases once a day. When a new version is out you get a notification (if you allow it) and an **Update available** card on the home screen and in Settings. Tap **Update now**: it downloads the APK built for your phone's CPU and hands it to Android's installer — your tabs, pins and settings stay. Turn this off under **Settings › Updates**.
+
 ## Privacy
 
 - No analytics, no telemetry, no account, no Google Play Services.
+- Once a day Ark asks GitHub whether a newer release exists (it sends only the app version). You can turn this off.
 - Enhanced Tracking Protection, HTTPS-only mode, Global Privacy Control and optional encrypted DNS (DNS over HTTPS) are all built in.
 - Private tabs keep no history, cookies or cache.
 

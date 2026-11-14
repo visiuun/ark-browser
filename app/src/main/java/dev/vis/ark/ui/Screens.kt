@@ -106,6 +106,10 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
 
     FullScreen("Settings", onBack) {
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 48.dp), modifier = Modifier.navigationBarsPadding()) {
+            if (updatePending()) {
+                item { UpdateCard(onOpenPage = { Browser.open(it, inNewTab = true); onBack() }) }
+                item { Spacer(Modifier.height(12.dp)) }
+            }
             if (activity.isDefaultBrowser) item {
                 Surface(onClick = { activity.openDefaultBrowserSettings() }, shape = RoundedCornerShape(32.dp), color = cs.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -202,9 +206,12 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             item { ToggleRow("Remote debugging", Prefs.remoteDebugging, 0, 2, "Debug pages from desktop Firefox via USB") { Prefs.remoteDebugging = it; apply() } }
             item { ClickRow("about:config", "Every Gecko preference, for experts", 1, 2) { Browser.newTab("about:config"); onBack() } }
 
+            item { SectionLabel("Updates") }
+            item { UpdateSection(onOpenPage = { Browser.open(it, inNewTab = true); onBack() }) }
+
             item { SectionLabel("About") }
             item {
-                SettingBlock("Ark 1.0", 0, 1) {
+                SettingBlock("Ark ${dev.vis.ark.BuildConfig.VERSION_NAME}", 0, 1) {
                     Text(
                         "Engine: Mozilla GeckoView ${org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION} (Firefox)\n" +
                             "UI: Material 3 Expressive\n" +

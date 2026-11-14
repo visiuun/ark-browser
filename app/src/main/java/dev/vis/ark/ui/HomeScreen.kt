@@ -134,6 +134,8 @@ fun HomeScreen(activity: MainActivity, onSearch: () -> Unit) {
             }
         }
 
+        if (updatePending()) UpdateCard(onOpenPage = { Browser.open(it, inNewTab = true) }, modifier = Modifier.padding(top = 16.dp))
+
         // Pinned sites with expressive shapes
         if (Prefs.pins.isNotEmpty()) {
             SectionLabel("Pinned")

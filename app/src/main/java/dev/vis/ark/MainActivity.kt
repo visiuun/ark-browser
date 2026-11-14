@@ -42,6 +42,8 @@ class MainActivity : ComponentActivity(), Host {
         /** Text to pre-fill into a freshly opened search sheet (from share / process text). */
         var pendingSearch by mutableStateOf<String?>(null)
         var inPip by mutableStateOf(false)
+        /** Set when the "update available" notification is tapped: Root opens Settings. */
+        var pendingUpdate by mutableStateOf(false)
     }
 
     private var permCb: ((Boolean) -> Unit)? = null
@@ -116,6 +118,7 @@ class MainActivity : ComponentActivity(), Host {
             Intent.ACTION_PROCESS_TEXT -> i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.let { Browser.open(it, inNewTab = true) }
             Intent.ACTION_ASSIST -> pendingSearch = ""
             ACTION_WEB_NOTIFICATION -> Notifier.click(i.getStringExtra("tag"))
+            dev.vis.ark.update.Updater.ACTION_SHOW -> pendingUpdate = true
             "dev.vis.ark.NEW_TAB" -> pendingSearch = ""
             "dev.vis.ark.NEW_PRIVATE" -> pendingSearch = "\u0000private"
         }
@@ -133,6 +136,8 @@ class MainActivity : ComponentActivity(), Host {
     override fun onResume() {
         super.onResume()
         isDefaultBrowser = checkDefaultBrowser()
+        dev.vis.ark.update.Updater.init(this)
+        dev.vis.ark.update.Updater.checkIfDue()
     }
 
     @Deprecated("Deprecated in Java")
