@@ -13,8 +13,8 @@ android {
         applicationId = "dev.vis.ark"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.3.2"
+        versionCode = 7
+        versionName = "1.3.3"
         buildConfigField("String", "UPDATE_REPO", "\"visiuun/ark-browser\"")
     }
 

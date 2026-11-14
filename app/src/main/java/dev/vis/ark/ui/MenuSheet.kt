@@ -101,7 +101,7 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
                 Triple(Sym.FindInPage, "Find") { onAction(MenuAction.Find) },
                 Triple(Sym.Share, "Share") { tab?.let { Browser.host?.share(it.title, it.url) } },
             ),
-            selected = { it == 1 && pinned }, height = 76.dp,
+            selected = { it == 1 && pinned }, height = 84.dp, iconSize = 26.dp,
         )
 
         Spacer(Modifier.height(6.dp))
@@ -117,9 +117,9 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
         }
         MenuRow(Sym.Translate, "Translate", translateSub, onClick = { onAction(MenuAction.Translate) })
         MenuRow(Sym.ZoomOutMap, "Zoom", "${((tab?.zoom ?: 1f) * 100).toInt()}%", onClick = null) {
-            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom + 0.1f) } }, enabled = tab != null) { MIcon(Sym.Add, "Zoom in", Modifier.size(24.dp)) }
+            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom + 0.1f) } }, enabled = tab != null) { MIcon(Sym.Add, "Zoom in", Modifier.size(26.dp)) }
             Spacer(Modifier.width(4.dp))
-            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom - 0.1f) } }, enabled = tab != null) { MIcon(Sym.Remove, "Zoom out", Modifier.size(24.dp)) }
+            IconButton(onClick = { tab?.let { Browser.setZoom(it, it.zoom - 0.1f) } }, enabled = tab != null) { MIcon(Sym.Remove, "Zoom out", Modifier.size(26.dp)) }
         }
         MenuRow(Sym.DesktopWindows, "Desktop Site", null, onClick = { tab?.let { Browser.setDesktop(it, !it.desktop) } }) {
             Checkbox(checked = tab?.desktop == true, onCheckedChange = { c -> tab?.let { Browser.setDesktop(it, c) } }, enabled = tab != null)
@@ -140,7 +140,7 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
                 Triple(Sym.Download, "Downloads") { onAction(MenuAction.Downloads) },
                 Triple(Sym.Extension, "Add-ons") { onAction(MenuAction.Extensions) },
                 Triple(Sym.Settings, "Settings") { onAction(MenuAction.Settings) },
-            ), height = 62.dp, iconSize = 22.dp, container = cs.surfaceContainerHigh, bottomRow = false,
+            ), height = 70.dp, iconSize = 24.dp, container = cs.surfaceContainerHigh, bottomRow = false,
         )
         Spacer(Modifier.height(3.dp))
         ConnectedRow(
@@ -149,7 +149,7 @@ fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () ->
                 Triple(Sym.AddToHomeScreen, "Home") { onAction(MenuAction.HomeScreen) },
                 Triple(Sym.PictureAsPdf, "PDF") { onAction(MenuAction.Pdf) },
                 Triple(Sym.Print, "Print") { onAction(MenuAction.Print) },
-            ), height = 62.dp, iconSize = 22.dp, container = cs.surfaceContainerHigh, topRow = false,
+            ), height = 70.dp, iconSize = 24.dp, container = cs.surfaceContainerHigh, topRow = false,
         )
         Spacer(Modifier.height(8.dp))
     }
@@ -160,17 +160,17 @@ private fun MenuRow(icon: String, title: String, subtitle: String?, onClick: (()
     Row(
         Modifier
             .fillMaxWidth()
-            .height(58.dp)
+            .height(64.dp)
             .clip(RoundedCornerShape(18.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MIcon(icon, null, Modifier.size(24.dp))
-        Spacer(Modifier.width(18.dp))
+        MIcon(icon, null, Modifier.size(26.dp))
+        Spacer(Modifier.width(20.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (trailing != null) Box { Row(verticalAlignment = Alignment.CenterVertically) { trailing() } }
     }
