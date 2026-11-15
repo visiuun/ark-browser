@@ -468,21 +468,12 @@ private val unusedPadding = PaddingValues(0.dp)
 fun homepageUrl(): String? =
     if (Prefs.homeMode == 2 && Prefs.homeUrl.isNotBlank()) dev.vis.ark.browser.Search.resolve(Prefs.homeUrl.trim()) else null
 
-/** Arc-style empty new tab: just the app logo. Tap it (or anywhere) to search. */
+/** Arc-style empty new tab: just the app logo, which you can grab, throw and spin. Tap anywhere to search. */
 @Composable
 fun BlankHome(onSearch: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(cs.surface)
-            .clickable(interactionSource = null, indication = null, onClick = onSearch),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Just the logo: the adaptive-icon foreground (artwork in the middle of a 108dp canvas).
-        androidx.compose.foundation.Image(
-            androidx.compose.ui.res.painterResource(dev.vis.ark.R.drawable.ic_launcher_fg), "Ark",
-            Modifier.requiredSize(180.dp),
-        )
+    Box(Modifier.fillMaxSize().background(cs.surface), contentAlignment = Alignment.Center) {
+        // The adaptive-icon foreground (artwork in the middle of a 108dp canvas), as a throwable toy.
+        ThrowableLogo(onTap = onSearch)
     }
 }
