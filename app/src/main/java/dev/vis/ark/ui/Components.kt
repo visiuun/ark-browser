@@ -264,9 +264,14 @@ fun ConnectedTile(
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             MIcon(icon, null, Modifier.size(iconSize))
             Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
-            Text(
-                label, style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            // Keeps clear of the tile's edges and shrinks to fit (large system font sizes, long labels).
+            val style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall
+            androidx.compose.foundation.text.BasicText(
+                label,
+                style = style.copy(color = androidx.compose.material3.LocalContentColor.current, textAlign = TextAlign.Center),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+                modifier = Modifier.padding(horizontal = 8.dp),
             )
         }
     }

@@ -54,6 +54,16 @@ enum class MenuAction { EditUrl, Summarize, Find, Translate, SiteSettings, Histo
 
 @Composable
 fun MenuSheetContent(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () -> Unit) {
+    // The menu is a fixed grid of tiles: follow the system text size, but only up to 1.15x, past that the
+    // labels can't fit their tiles any more (they also shrink to fit on their own).
+    val d = LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalDensity provides androidx.compose.ui.unit.Density(d.density, d.fontScale.coerceAtMost(1.15f)),
+    ) { MenuSheetBody(tab, onAction, onDismiss) }
+}
+
+@Composable
+private fun MenuSheetBody(tab: Tab?, onAction: (MenuAction) -> Unit, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
@@ -195,7 +205,7 @@ private fun MenuRow(icon: String, title: String, subtitle: String?, onClick: (()
     Row(
         Modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .heightIn(min = 64.dp)
             .clip(RoundedCornerShape(18.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp),
