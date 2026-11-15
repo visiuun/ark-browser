@@ -472,6 +472,17 @@ fun homepageUrl(): String? =
 @Composable
 fun BlankHome(onSearch: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    // Shaking the logo around would also flip the screen with auto-rotate: hold the current orientation
+    // while this page is up, and hand it back to the system when leaving.
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        var c: android.content.Context? = ctx
+        while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+        val activity = c as? android.app.Activity
+        val before = activity?.requestedOrientation
+        activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        onDispose { if (activity != null && before != null) activity.requestedOrientation = before }
+    }
     Box(Modifier.fillMaxSize().background(cs.surface), contentAlignment = Alignment.Center) {
         // The adaptive-icon foreground (artwork in the middle of a 108dp canvas), as a throwable toy.
         ThrowableLogo(onTap = onSearch)
