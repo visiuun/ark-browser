@@ -7,6 +7,15 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.view.Surface
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onSizeChanged
 import android.view.View
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
@@ -56,13 +65,19 @@ private class LogoBody {
     var vx = 0f
     var vy = 0f
     var spin = 0f // deg/s
+    /** Pushed off its spot in the middle: stays wherever it ends up, and shaking the phone moves it. */
+    var loose by mutableStateOf(false)
+    /** Shake force from the accelerometer, already in screen px/s² (the "in your phone" pseudo-force). */
+    @Volatile var ax = 0f
+    @Volatile var ay = 0f
 }
 
 /**
  * The Blank homepage's logo as a little physical toy, like Arc's: grab it anywhere and it hangs off your
  * finger (turning around the grab point), throw it and it flies, bounces off the edges and spins, with
- * haptics for the grab, the throw, every bounce (harder hits, stronger thuds) and fast spins. Left alone it
- * drifts back to the middle. A tap, on the logo or anywhere else, still opens search.
+ * haptics for the grab, the throw, every bounce (harder hits, stronger thuds) and fast spins. Once it's been
+ * moved it stays loose like a little thing inside the phone: shake the phone and it rattles around. Double-tap
+ * it (or drop it back in the middle) to pin it again. A tap, on the logo or anywhere else, still opens search.
  */
 @Composable
 fun BoxScope.ThrowableLogo(onTap: () -> Unit) {
@@ -74,10 +89,74 @@ fun BoxScope.ThrowableLogo(onTap: () -> Unit) {
     val sim = remember { arrayOfNulls<Job>(1) }
     val radius = with(density) { 44.dp.toPx() }  // the artwork (two cards) inside the 180dp image
     val grabRadius = with(density) { 70.dp.toPx() }
+    val pinRadius = with(density) { 28.dp.toPx() }
+    val area = remember { floatArrayOf(0f, 0f) }
+    val pendingTap = remember { arrayOfNulls<Job>(1) }
+    val lastLogoTap = remember { longArrayOf(0L) }
+
+    fun launchFly() {
+        if (area[0] <= 0f || sim[0]?.isActive == true) return
+        sim[0] = scope.launch {
+            fly(body, haptics, radius, area[0], area[1])
+            // Came to rest close to the middle: snap back onto its spot and pin it there.
+            if (hypot(body.x, body.y) < pinRadius) { body.loose = false; settle(body, haptics) }
+        }
+    }
+    fun pinHome() {
+        sim[0]?.cancel()
+        body.loose = false
+        sim[0] = scope.launch { settle(body, haptics) }
+    }
+
+    // Shake: while the logo is loose, the phone's own movement pushes it the other way (it "stays put" while the
+    // walls move), so a flick of the phone slams it into a wall. Gravity is filtered out, so tilting does nothing.
+    if (body.loose) {
+        val ctx = LocalContext.current
+        val pxPerMeter = with(density) { 2600.dp.toPx() }
+        DisposableEffect(Unit) {
+            val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            // The fused linear-acceleration sensor already has gravity taken out; without one, filter the raw
+            // accelerometer (a slow low-pass is the gravity estimate, what's left is the shake).
+            val linear = sm?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+            val sensor = linear ?: sm?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            val gravity = FloatArray(3)
+            var primed = linear != null
+            val listener = object : SensorEventListener {
+                override fun onSensorChanged(e: SensorEvent) {
+                    val v = e.values
+                    if (!primed) { v.copyInto(gravity, 0, 0, 3); primed = true; return }
+                    if (linear == null) for (i in 0..2) gravity[i] = gravity[i] * 0.94f + v[i] * 0.06f
+                    var lx = v[0] - gravity[0]
+                    var ly = v[1] - gravity[1]
+                    // Hand tremor and sensor noise stay below ~1.5 m/s²; only real shakes count.
+                    val mag = hypot(lx, ly)
+                    if (mag < 1.5f) { body.ax = 0f; body.ay = 0f; return }
+                    val k = (mag - 1.5f) / mag
+                    lx *= k; ly *= k
+                    // Device axes (x right, y up) → screen axes, for the current display rotation.
+                    val rot = view.display?.rotation ?: Surface.ROTATION_0
+                    val (sx, sUp) = when (rot) {
+                        Surface.ROTATION_90 -> ly to -lx
+                        Surface.ROTATION_180 -> -lx to -ly
+                        Surface.ROTATION_270 -> -ly to lx
+                        else -> lx to ly
+                    }
+                    // The logo is pushed opposite to the phone's acceleration (screen y points down).
+                    body.ax = -sx * pxPerMeter
+                    body.ay = sUp * pxPerMeter
+                    view.post { launchFly() }
+                }
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+            }
+            if (sensor != null) sm?.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
+            onDispose { sm?.unregisterListener(listener); body.ax = 0f; body.ay = 0f }
+        }
+    }
 
     Box(
         Modifier
             .matchParentSize()
+            .onSizeChanged { area[0] = it.width.toFloat(); area[1] = it.height.toFloat() }
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -86,6 +165,7 @@ fun BoxScope.ThrowableLogo(onTap: () -> Unit) {
                     val onLogo = r.getDistance() < grabRadius
                     if (onLogo) {
                         sim[0]?.cancel()
+                        pendingTap[0]?.cancel()
                         body.vx = 0f; body.vy = 0f; body.spin = 0f
                         haptics.grab()
                         scope.launch { animate(body.scale, 1.08f, animationSpec = spring(0.5f, Spring.StiffnessMedium)) { v, _ -> body.scale = v } }
@@ -102,6 +182,7 @@ fun BoxScope.ThrowableLogo(onTap: () -> Unit) {
                         if (!moved && (ch.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
                         if (!moved || !onLogo) continue
                         ch.consume()
+                        body.loose = true
                         // Pulling at r by d turns the logo by the torque r × d (plus some inertia so a grab near
                         // the middle mostly slides it); the grab point stays under the finger.
                         val d = ch.positionChange()
@@ -124,8 +205,17 @@ fun BoxScope.ThrowableLogo(onTap: () -> Unit) {
                     scope.launch { animate(body.scale, 1f, animationSpec = spring(0.45f, Spring.StiffnessMedium)) { v, _ -> body.scale = v } }
                     if (!moved) {
                         haptics.release(0.2f)
-                        onTap()
-                        sim[0] = scope.launch { settle(body, haptics) }
+                        if (!body.loose) { onTap(); pinHome(); return@awaitEachGesture }
+                        // Loose: a double-tap calls it home, so a single tap waits a moment before searching.
+                        val now = System.currentTimeMillis()
+                        if (now - lastLogoTap[0] < viewConfiguration.doubleTapTimeoutMillis) {
+                            lastLogoTap[0] = 0L
+                            pinHome()
+                        } else {
+                            lastLogoTap[0] = now
+                            launchFly()
+                            pendingTap[0] = scope.launch { delay(viewConfiguration.doubleTapTimeoutMillis); onTap() }
+                        }
                         return@awaitEachGesture
                     }
                     val v = tracker.calculateVelocity()
@@ -136,7 +226,7 @@ fun BoxScope.ThrowableLogo(onTap: () -> Unit) {
                     val (t1, a1) = angles.last()
                     body.spin = if (t1 > t0) ((a1 - a0) / ((t1 - t0) / 1000f)).coerceIn(-2400f, 2400f) else 0f
                     haptics.release((hypot(body.vx, body.vy) / 6000f).coerceIn(0.15f, 0.8f))
-                    sim[0] = scope.launch { fly(body, haptics, radius, size.width.toFloat(), size.height.toFloat()) }
+                    launchFly()
                 }
             }
     )
@@ -158,7 +248,7 @@ private fun rotate(p: Offset, theta: Float): Offset {
     return Offset(p.x * c - p.y * s, p.x * s + p.y * c)
 }
 
-/** Free flight: drag, wall bounces that trade sliding for spin, then a glide home once it's come to rest. */
+/** Free flight: shake force, drag, wall bounces that trade sliding for spin; ends once it has come to rest. */
 private suspend fun fly(b: LogoBody, haptics: ToyHaptics, radius: Float, w: Float, h: Float) {
     val maxX = (w / 2f - radius).coerceAtLeast(0f)
     val maxY = (h / 2f - radius).coerceAtLeast(0f)
@@ -171,6 +261,8 @@ private suspend fun fly(b: LogoBody, haptics: ToyHaptics, radius: Float, w: Floa
         val now = withFrameNanos { it }
         val dt = ((now - last) / 1e9f).coerceIn(0f, 1f / 30f)
         last = now
+        b.vx = (b.vx + b.ax * dt).coerceIn(-12000f, 12000f)
+        b.vy = (b.vy + b.ay * dt).coerceIn(-12000f, 12000f)
         b.x += b.vx * dt; b.y += b.vy * dt; b.angle += b.spin * dt
         val drag = exp(-1.1f * dt)
         b.vx *= drag; b.vy *= drag; b.spin *= exp(-1.4f * dt)
@@ -189,12 +281,10 @@ private suspend fun fly(b: LogoBody, haptics: ToyHaptics, radius: Float, w: Floa
             lastTick = b.angle
         }
 
-        val slow = hypot(b.vx, b.vy) < 40f && abs(b.spin) < 30f
+        val slow = hypot(b.vx, b.vy) < 40f && abs(b.spin) < 30f && b.ax == 0f && b.ay == 0f
         resting = if (slow) resting + dt else 0f
         if (resting > 0.25f) break
     }
-    delay(900)
-    settle(b, haptics)
 }
 
 /** Springs back to the middle, upright (the nearest full turn, so it doesn't unwind). */

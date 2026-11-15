@@ -89,7 +89,7 @@ The new-tab screen is a small dashboard built only from free, open, key-less API
 
 No account, no API key, no tracking. Place names use [OpenStreetMap Nominatim](https://nominatim.org); search suggestions come from DuckDuckGo and are never sent in private tabs.
 
-Prefer Arc's empty new tab? **Settings › Home › Homepage** switches between this dashboard, **Blank** (just the Ark logo, which you can grab, throw and spin, with haptics, like Arc's) or **any page** you like.
+Prefer Arc's empty new tab? **Settings › Home › Homepage** switches between this dashboard, **Blank** (just the Ark logo, which you can grab, throw and spin, with haptics, like Arc's. Once it's loose, shake your phone to rattle it around; double-tap it to pin it back) or **any page** you like.
 
 ## Material 3 Expressive
 
