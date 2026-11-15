@@ -301,6 +301,12 @@ object Browser {
             override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) { t.canForward = canGoForward }
 
             override fun onLoadRequest(session: GeckoSession, request: NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny>? {
+                // "Try again" on an error page: reload with a fresh DNS lookup and connection, not from cache.
+                if (request.uri == RETRY_URI) {
+                    t.failedUri = null
+                    main.post { session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE) }
+                    return GeckoResult.deny()
+                }
                 val scheme = request.uri.substringBefore(':').lowercase()
                 if (scheme in internalSchemes) return GeckoResult.allow()
                 val opened = host?.openExternal(request.uri) == true
@@ -322,8 +328,22 @@ object Browser {
                 return GeckoResult.fromValue(ns)
             }
 
-            override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? =
-                GeckoResult.fromValue(errorPage(uri ?: "", error))
+            override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? {
+                val u = uri ?: ""
+                val now = System.currentTimeMillis()
+                // A lookup or connection that failed once usually works a moment later (flaky Wi-Fi, a resolver
+                // hiccup, a network switch). Retry once by ourselves, bypassing Gecko's cached failure, before
+                // showing an error.
+                val transient = error.code == WebRequestError.ERROR_UNKNOWN_HOST || error.code == WebRequestError.ERROR_NET_TIMEOUT ||
+                    error.code == WebRequestError.ERROR_NET_RESET || error.code == WebRequestError.ERROR_NET_INTERRUPT
+                if (transient && u.isNotBlank() && (t.autoRetried != u || now - t.autoRetriedAt > 30_000)) {
+                    t.autoRetried = u; t.autoRetriedAt = now
+                    main.postDelayed({ if (t.session === session && session.isOpen) session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE) }, 700)
+                    return GeckoResult.fromValue(retryPage(u))
+                }
+                t.failedUri = u
+                return GeckoResult.fromValue(errorPage(u, error))
+            }
         }
 
         s.scrollDelegate = object : GeckoSession.ScrollDelegate {
@@ -538,14 +558,35 @@ object Browser {
 
     // ---------------------------------------------------------------- error page
 
+    /** Reserved address the error page's "Try again" button points at; onLoadRequest turns it into a fresh reload. */
+    private const val RETRY_URI = "https://ark.invalid/retry"
+
+    private fun hostLabel(uri: String) = runCatching { Uri.parse(uri).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: "this site"
+
+    /** Shown for the split second while Ark retries a failed load by itself. */
+    private fun retryPage(uri: String): String {
+        val html = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#fff8f8;color:#6f5a60;font-family:system-ui,sans-serif;font-size:16px}
+@media(prefers-color-scheme:dark){body{background:#000;color:#d3c1c6}}</style></head><body>Connecting to ${hostLabel(uri).replace("<", "&lt;")}…</body></html>"""
+        return "data:text/html;charset=utf-8;base64," + Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
+    }
+
     private fun errorPage(uri: String, error: WebRequestError): String {
-        val (title, desc) = when (error.category) {
+        val host = hostLabel(uri)
+        val dohHint = if (Engine.dohUri() != null) " You're using Secure DNS (${Engine.dohName()}); if this keeps happening, try another provider in Settings." else ""
+        val (title, desc) = when {
+            error.code == WebRequestError.ERROR_UNKNOWN_HOST -> "Can't find this site" to "Ark couldn't look up $host. Check your connection, or the address may be mistyped.$dohHint"
+            error.code == WebRequestError.ERROR_NET_TIMEOUT -> "This site is taking too long" to "$host didn't answer in time. Check your connection and try again."
+            error.code == WebRequestError.ERROR_CONNECTION_REFUSED -> "Can't connect" to "$host refused the connection. The site may be down."
+            error.code == WebRequestError.ERROR_OFFLINE -> "You're offline" to "Connect to Wi-Fi or mobile data and try again."
+            else -> when (error.category) {
             WebRequestError.ERROR_CATEGORY_SECURITY -> "Connection isn't secure" to "The site's security certificate couldn't be verified, so Ark stopped loading it to protect you."
             WebRequestError.ERROR_CATEGORY_NETWORK -> "Can't reach this site" to "Check your connection, or the address may be wrong. The server might also be down."
             WebRequestError.ERROR_CATEGORY_URI -> "Invalid address" to "This web address doesn't look right."
             WebRequestError.ERROR_CATEGORY_SAFEBROWSING -> "Deceptive or harmful site" to "This site was reported as unsafe by Safe Browsing."
             WebRequestError.ERROR_CATEGORY_PROXY -> "Proxy error" to "The proxy server refused the connection."
             else -> "Page couldn't load" to "Something went wrong while loading this page."
+            }
         }
         val esc = { s: String -> s.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;") }
         val html = """
@@ -561,7 +602,7 @@ p{color:var(--mut);font-size:17px;line-height:1.5}
 code{display:block;word-break:break-all;color:var(--mut);font-size:13px;margin:18px 0 28px;opacity:.8}
 a{display:inline-block;background:var(--acc);color:var(--bg);padding:16px 28px;border-radius:999px;text-decoration:none;font-weight:700;font-size:16px}
 </style></head><body><main><div class="blob">⚠︎</div><h1>${esc(title)}</h1><p>${esc(desc)}</p>
-<code>${esc(uri)} · error ${error.code}</code><a href="${esc(uri)}">Try again</a></main></body></html>"""
+<code>${esc(uri)} · error ${error.code}</code><a href="$RETRY_URI">Try again</a></main></body></html>"""
         return "data:text/html;charset=utf-8;base64," + Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
     }
 }

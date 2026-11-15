@@ -49,6 +49,11 @@ class Tab(
     var mediaRecording by mutableStateOf(false)
     var lastUsed = System.currentTimeMillis()
 
+    /** The address whose load just failed (its error page is showing), and when Ark last retried one by itself. */
+    var failedUri: String? = null
+    var autoRetried: String? = null
+    var autoRetriedAt = 0L
+
     /** Port to our helper content script in the current page. */
     var port: WebExtension.Port? = null
     private var pending: ((JSONObject) -> Unit)? = null

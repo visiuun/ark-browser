@@ -82,6 +82,18 @@ object Engine {
             org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref(pref, 0, org.mozilla.geckoview.GeckoPreferenceController.PREF_BRANCH_USER)
         }
 
+        // DNS: on Android GeckoView also asks the system resolver for each site's HTTPS record and waits up to
+        // 20 s for it. Many routers, carriers and Private DNS servers silently drop those queries, which made
+        // every new site (search results included) hang, and sometimes fail as "unknown host". Ark doesn't
+        // need them, so skip them; if anything turns them back on, give up after 2 s instead of 20.
+        // With Secure DNS on, a lookup the DoH server can't answer falls back to the system resolver.
+        val user = org.mozilla.geckoview.GeckoPreferenceController.PREF_BRANCH_USER
+        runCatching { org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.dns.native_https_query", false, user) }
+        runCatching { org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.dns.native_https_timeout_android", 2000, user) }
+        runCatching { org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.trr.strict_native_fallback", false, user) }
+        if (dev.vis.ark.BuildConfig.DEBUG) org.mozilla.geckoview.GeckoPreferenceController.getGeckoPrefs(
+            listOf("network.dns.native_https_query", "network.dns.native_https_timeout_android", "network.trr.strict_native_fallback"),
+        ).accept { l -> l?.forEach { Log.d(TAG, "pref $it") } }
         val ctrl = runtime.webExtensionController
         ctrl.promptDelegate = object : WebExtensionController.PromptDelegate {
             // Installs are always user initiated from our UI, so accept the permission prompt.
