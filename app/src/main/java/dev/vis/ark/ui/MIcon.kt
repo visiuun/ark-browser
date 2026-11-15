@@ -16,12 +16,16 @@ import androidx.compose.ui.unit.dp
 private object SymbolVectors {
     private val cache = HashMap<Pair<Char, Boolean>, ImageVector>()
     fun get(glyph: Char, filled: Boolean): ImageVector = cache.getOrPut(glyph to filled) {
-        val d = SymPaths.map[glyph]?.let { if (filled) it.second else it.first } ?: ""
+        val raw = SymPaths.map[glyph]?.let { if (filled) it.second else it.first } ?: ""
+        // "@…" paths come straight from the web SVGs, whose viewBox starts at y = -960.
+        val web = raw.startsWith("@")
         ImageVector.Builder(
             name = "sym_${glyph.code.toString(16)}${if (filled) "_f" else ""}",
             defaultWidth = 24.dp, defaultHeight = 24.dp,
             viewportWidth = 960f, viewportHeight = 960f,
-        ).addPath(addPathNodes(d), fill = SolidColor(Color.Black)).build()
+        ).addGroup(translationY = if (web) 960f else 0f)
+            .addPath(addPathNodes(raw.removePrefix("@")), fill = SolidColor(Color.Black))
+            .clearGroup().build()
     }
 }
 

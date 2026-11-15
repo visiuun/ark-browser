@@ -161,9 +161,7 @@ fun TabSwitcher(onClose: () -> Unit, onNewTab: (Boolean) -> Unit, onSettings: ()
                     androidx.compose.material3.TextButton(
                         enabled = list.isNotEmpty(),
                         onClick = {
-                            val n = list.size
                             Browser.closeAll(privateMode)
-                            Browser.host?.snack(if (n == 1) "Closed 1 tab" else "Closed $n tabs")
                         },
                     ) { Text("Clear", style = MaterialTheme.typography.titleMedium) }
                 }

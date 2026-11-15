@@ -63,6 +63,8 @@ sealed class Req {
     ) : Req()
     class Context(val tab: Tab, val el: ContentDelegate.ContextElement) : Req()
     class Confirm(val title: String, val message: String, val confirm: String, val action: () -> Unit) : Req()
+    /** Fire mode: "Fireproof these sites so they stay signed in?" */
+    class Fireproof(val sites: List<String>) : Req()
 }
 
 object Browser {
@@ -112,7 +114,7 @@ object Browser {
         if (initialized) return
         initialized = true
         app = ctx.applicationContext
-        if (Prefs.restoreTabs) restore()
+        if (Prefs.restoreTabs && !Prefs.forget) restore()
     }
 
     fun push(r: Req) { main.post { prompts.add(r) } }
@@ -181,11 +183,28 @@ object Browser {
         }
     }
 
-    fun closeAll(private: Boolean) {
-        tabs.filter { it.private == private }.forEach { it.session?.close(); tabs.remove(it) }
+    fun closeAll(private: Boolean, undoable: Boolean = true) {
+        val gone = tabs.filter { it.private == private }
+        gone.forEach { it.session?.close(); tabs.remove(it) }
         if (current == null) currentId = null
         viewEpoch++
         save()
+        val back = gone.filter { it.url.isNotBlank() }
+        if (undoable && back.isNotEmpty()) host?.snack(if (gone.size == 1) "Closed 1 tab" else "Closed ${gone.size} tabs", "Undo") {
+            back.forEach { tabs.add(Tab(nextId++, it.private, it.url, initialTitle = it.title).also { n -> n.desktop = it.desktop }) }
+            select(tabs.lastOrNull { it.private == private })
+        }
+    }
+
+    /** Fire mode: drop every tab (normal and private) and the saved tab list, with no undo. */
+    fun wipeTabs() {
+        tabs.forEach { runCatching { it.session?.close() } }
+        tabs.clear()
+        prompts.clear()
+        currentId = null
+        main.removeCallbacks(saver)
+        Prefs.putString("tabs", null)
+        viewEpoch++
     }
 
     /** Load what the user typed into the search sheet. */
@@ -225,6 +244,7 @@ object Browser {
 
     fun saveNow() {
         if (!initialized) return
+        if (Prefs.forget) { Prefs.putString("tabs", null); return }
         val arr = JSONArray()
         tabs.filter { !it.private && it.url.isNotBlank() }.forEach {
             arr.put(JSONObject().put("id", it.id).put("url", it.url).put("title", it.title).put("state", it.savedState ?: JSONObject.NULL).put("desktop", it.desktop))
@@ -272,6 +292,7 @@ object Browser {
                 if (url == null) return
                 val hostChanged = hostOf(url) != hostOf(t.url)
                 t.url = url
+                if (!t.private) Prefs.touch(Fire.siteOf(url))
                 if (hostChanged) { t.themeColor = null; t.iconUrl = null; t.zoom = Prefs.zoomFor(t.host) }
                 save()
             }
@@ -318,6 +339,7 @@ object Browser {
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 t.loading = false; t.progress = 100
+                Fire.onPageStop(t)
             }
 
             override fun onProgressChange(session: GeckoSession, progress: Int) { t.progress = progress }
@@ -480,6 +502,15 @@ object Browser {
         override fun onPopupPrompt(session: GeckoSession, prompt: PromptDelegate.PopupPrompt) = ask<Unit> { Req.Popup(prompt, it) }
         override fun onBeforeUnloadPrompt(session: GeckoSession, prompt: PromptDelegate.BeforeUnloadPrompt) = ask<Unit> { Req.BeforeUnload(prompt, it) }
         override fun onRepostConfirmPrompt(session: GeckoSession, prompt: PromptDelegate.RepostConfirmPrompt) = ask<Unit> { Req.Repost(prompt, it) }
+
+        // Ark doesn't keep passwords, but a submitted login form is how fire mode knows you just signed in.
+        override fun onLoginSave(
+            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<org.mozilla.geckoview.Autocomplete.LoginSaveOption>,
+        ): GeckoResult<PromptResponse>? {
+            val origin = runCatching { request.options.firstOrNull()?.value?.origin }.getOrNull()
+            main.post { Fire.loginSeen(t, hostOf(origin ?: t.url)) }
+            return GeckoResult.fromValue(request.dismiss())
+        }
 
         override fun onSharePrompt(session: GeckoSession, prompt: PromptDelegate.SharePrompt): GeckoResult<PromptResponse> {
             main.post { host?.share(prompt.text ?: prompt.title, prompt.uri) }

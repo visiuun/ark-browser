@@ -1,30 +1,236 @@
 Ark Browser
 Copyright (c) 2026 visiuun
+https://github.com/visiuun/ark-browser
 
-This work is licensed under the Creative Commons
-Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+Required Notice: Copyright (c) 2026 visiuun. Ark Browser, https://github.com/visiuun/ark-browser
+Required Notice: Licensed under the PolyForm Noncommercial License 1.0.0 together with the Ark Additional Terms in this file. Credit to visiuun is mandatory.
 
-You are free to:
-  - Share    copy and redistribute the material in any medium or format
-  - Adapt    remix, transform, and build upon the material
+=============================================================================
+HOW THIS LICENSE IS BUILT
+=============================================================================
 
-Under the following terms:
-  - Attribution    You must give appropriate credit, provide a link to the
-                   license, and indicate if changes were made.
-  - NonCommercial  You may not use the material for commercial purposes.
+The Ark application code in this repository (everything except the
+third-party components listed in Part 3) is licensed to you under BOTH:
 
-No warranties are given. The full license text is available at:
-https://creativecommons.org/licenses/by-nc/4.0/legalcode
+  Part 1  The PolyForm Noncommercial License 1.0.0, reproduced unchanged
+          below, and
+  Part 2  The Ark Additional Terms, which add conditions to every license
+          Part 1 gives you, plus one extra permission (2.5).
 
----
+To have any license at all you must follow both parts. Where Part 2 is
+stricter than Part 1, Part 2 applies. Releases of Ark published before
+version 1.5.0 were offered under CC BY-NC 4.0 and remain available under it.
 
-Ark embeds and builds on third-party software under their own licenses:
+-----------------------------------------------------------------------------
+PLAIN-ENGLISH SUMMARY (for convenience only; the terms below are what count)
+-----------------------------------------------------------------------------
 
-  - Mozilla GeckoView (the Firefox web engine)   MPL 2.0
-  - uBlock Origin, bundled as the ad blocker      GPL 3.0
-      Raymond Hill and contributors, unmodified, redistributed under GPL 3.0.
+  You CAN, for free:
+    - use Ark as your browser, at home or at work
+    - read, study, build and modify the code
+    - share Ark or your modified version, for free, with the credit intact
+    - fork it under a different name, teach with it, research with it
+    - use it in schools, charities, nonprofits and public institutions
+    - review it, write about it, or make videos about it (monetized or not)
+
+  You MUST:
+    - credit visiuun visibly, in the app and wherever you offer it
+    - keep this license and its notices with every copy
+    - say so if you changed it, and use your own name and icon for forks
+
+  You CANNOT, without a separate written license from visiuun:
+    - sell it, charge for it, or put any of it behind a paywall
+    - add ads, sponsored or affiliate search, or other paid placements
+    - collect, sell or monetize the data of the people who use it
+    - ship it inside, or as part of, a for-profit product or service
+    - remove or hide the credit, or pass a fork off as the real Ark
+
+=============================================================================
+PART 1: POLYFORM NONCOMMERCIAL LICENSE 1.0.0
+=============================================================================
+
+# PolyForm Noncommercial License 1.0.0
+
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
+
+## Acceptance
+
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license to distribute copies of the software.  Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+
+## Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law. These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
+
+**You** refers to the individual or entity agreeing to these terms.
+
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization.  **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the software under these terms.
+
+**Use** means anything you do with the software requiring one of your licenses.
+
+=============================================================================
+PART 2: ARK ADDITIONAL TERMS
+=============================================================================
+
+These terms add conditions to every license you get under Part 1. Words
+defined in Part 1 (software, licensor, you, your company, use) mean the same
+here. The licensor is visiuun. A "derived work" is any work based on the
+software, including modified versions, forks, ports, partial copies, and
+apps built from its code.
+
+2.1  Credit is mandatory.
+     If you distribute the software or a derived work, or make either
+     available to anyone else in any form (source code, compiled app,
+     installer, app store listing, website or service), you must:
+
+     (a) keep every copyright notice, every "Required Notice:" line, and
+         this entire file, unchanged, with every copy;
+
+     (b) show this credit line, readable and unabbreviated:
+
+             Based on Ark by visiuun: https://github.com/visiuun/ark-browser
+
+         both (i) inside the app, on its About, Settings or credits screen,
+         where a user can find it without special effort, and (ii) on every
+         page where you offer it, such as your README, release page,
+         website or store listing;
+
+     (c) state clearly, in the same places, that you changed the software,
+         if you did.
+
+     You may not remove, hide, shorten, obscure or bury the credit, for
+     example by making it unreadable, putting it somewhere users would not
+     reasonably look, or showing it only to some users.
+
+2.2  No passing off.
+     A derived work you distribute must have a name and an icon that are
+     clearly different from "Ark", "Ark Browser" and the Ark logo, and must
+     not suggest that visiuun made, endorses, supports or is responsible for
+     it. Saying truthfully that it is based on Ark is allowed, and required
+     by 2.1.
+
+2.3  What counts as commercial.
+     In addition to everything Part 1 does not permit, the following are
+     commercial purposes. They are not permitted under these terms, no
+     matter who does them (individuals and noncommercial organizations
+     included), and need a separate written license from visiuun:
+
+     (a) selling the software or a derived work, or charging any fee for
+         downloading, installing, accessing, unlocking, supporting or
+         updating it;
+     (b) putting advertising, sponsored or affiliate content, paid search
+         placement, referral codes, or any other paid promotion in it;
+     (c) collecting, selling, sharing or otherwise monetizing data about
+         the people who use it;
+     (d) preinstalling, bundling or shipping it with, or as part of, any
+         product or service that is sold or that earns money for anyone,
+         or using it inside a for-profit company's product or service;
+     (e) being paid, in money or anything else of value, to distribute it
+         or a derived work;
+     (f) using its source code to train, fine-tune or evaluate a machine
+         learning model that is offered commercially.
+
+     Asking for voluntary donations for your own free, noncommercial fork
+     is allowed, as long as nothing in it is locked, limited or changed for
+     people who do not donate.
+
+2.4  Same terms for everyone downstream.
+     Everyone who receives the software or a derived work from you gets it
+     under these same terms (Parts 1 and 2), and you may not offer it under
+     terms that drop or weaken any of them. Code you wrote yourself that
+     stands on its own is yours to license as you like, but any copy that
+     combines it with the software stays under these terms.
+
+2.5  Extra permission: using Ark as a browser.
+     Anyone, including people at work and organizations of any kind, may
+     install and use the software, unmodified or modified only for their own
+     use, as their web browser for any purpose. This permission covers
+     browsing only; it does not allow anything listed in 2.3.
+
+2.6  Contributions.
+     If you submit a contribution (code, text, images or other material) to
+     this repository, you keep your copyright and will be credited, and you
+     grant visiuun a perpetual, worldwide, royalty-free license to use,
+     modify and distribute your contribution under these terms or any other
+     terms, including commercial ones. Only submit work you have the right
+     to submit.
+
+2.7  Commercial licenses.
+     To do something these terms don't allow, ask visiuun through
+     https://github.com/visiuun. Nothing beyond these terms is permitted
+     unless agreed in writing.
+
+2.8  Violations.
+     Breaking any term in Part 2 is breaking these terms under Part 1,
+     including its Violations and Termination sections, so the 32-day
+     chance to fix a first, notified violation applies here too.
+
+=============================================================================
+PART 3: THIRD-PARTY COMPONENTS (NOT COVERED BY PARTS 1 AND 2)
+=============================================================================
+
+Ark includes and builds on third-party software. Each stays under its own
+license; nothing in Parts 1 and 2 restricts your rights to these components.
+
+  - Mozilla GeckoView (the Firefox web engine)            MPL 2.0
+      https://mozilla.github.io/geckoview/
+  - uBlock Origin, bundled unmodified as the ad blocker    GPL 3.0
+      Raymond Hill and contributors, redistributed under GPL 3.0.
       Source: https://github.com/gorhill/uBlock
-  - Material Symbols (icons)                       Apache 2.0
-
-These components remain under their respective licenses. The CC BY-NC 4.0
-terms above apply to the Ark application code in this repository.
+  - Material Symbols (icons)                               Apache 2.0
+      Google, https://github.com/google/material-design-icons

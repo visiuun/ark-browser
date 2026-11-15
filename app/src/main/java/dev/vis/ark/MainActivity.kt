@@ -26,6 +26,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import dev.vis.ark.browser.Browser
 import dev.vis.ark.browser.Downloads
 import dev.vis.ark.browser.Engine
+import dev.vis.ark.browser.Fire
 import dev.vis.ark.browser.Host
 import dev.vis.ark.browser.Notifier
 import dev.vis.ark.data.HistoryStore
@@ -44,6 +45,17 @@ class MainActivity : ComponentActivity(), Host {
         var inPip by mutableStateOf(false)
         /** Set when the "update available" notification is tapped: Root opens Settings. */
         var pendingUpdate by mutableStateOf(false)
+        /** App lock: true while Ark is covered and waiting for a fingerprint, face or screen-lock check. */
+        var locked by mutableStateOf(false)
+    }
+
+    /** A system sheet we opened ourselves (file picker, camera, voice) is up: coming back from it doesn't re-lock. */
+    private var ownSheetOpen = false
+    private var authInFlight = false
+    private var authCb: ((Boolean) -> Unit)? = null
+    private val credLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val cb = authCb; authCb = null; authInFlight = false
+        cb?.invoke(res.resultCode == RESULT_OK)
     }
 
     private var permCb: ((Boolean) -> Unit)? = null
@@ -55,6 +67,7 @@ class MainActivity : ComponentActivity(), Host {
     private var fileCb: ((Array<Uri>?) -> Unit)? = null
     private var cameraUri: Uri? = null
     private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        ownSheetOpen = false
         val cb = fileCb; fileCb = null
         val data = res.data
         val uris: Array<Uri>? = when {
@@ -70,6 +83,7 @@ class MainActivity : ComponentActivity(), Host {
 
     private var voiceCb: ((String) -> Unit)? = null
     private val voiceLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        ownSheetOpen = false
         val text = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (text != null) voiceCb?.invoke(text)
         voiceCb = null
@@ -97,13 +111,91 @@ class MainActivity : ComponentActivity(), Host {
         Browser.host = this
         Browser.init(this)
         Engine.ensureAdBlocker(this)
-        if (savedInstanceState == null) handleIntent(intent)
-        setContent { ArkTheme { ArkRoot(this) } }
+        if (Prefs.appLock) locked = true
+        applyRecentsPrivacy()
+        // Fire mode: a fresh start (not a re-creation of a running Ark) erases everything that isn't fireproofed.
+        if (Prefs.forget && savedInstanceState == null) Fire.burn()
+        if (savedInstanceState == null) Fire.whenReady { handleIntent(intent) }
+        setContent {
+            ArkTheme {
+                // Locked: nothing of the browser is composed at all, so no page, sheet or dialog can show through.
+                if (!locked) ArkRoot(this)
+                androidx.compose.animation.AnimatedVisibility(
+                    Fire.burning,
+                    enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)),
+                    exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(450)),
+                ) { dev.vis.ark.ui.BurnScreen() }
+                if (locked) dev.vis.ark.ui.LockScreen(onUnlock = { unlock() }, onLeave = { moveTaskToBack(true) })
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        // Leaving Ark for good (swiped away, or closed by the system for the user) burns right away
+        // instead of waiting for the next start.
+        if (isFinishing && !isChangingConfigurations && Prefs.forget) Fire.burn()
+        super.onDestroy()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (locked && !authInFlight) window.decorView.post { if (locked && !isFinishing) unlock() }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (Prefs.appLock && !authInFlight && !ownSheetOpen && !isChangingConfigurations) locked = true
+    }
+
+    /** With the app lock on, Android 13+ shows a blank card for Ark in Recents. */
+    fun applyRecentsPrivacy() {
+        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(!Prefs.appLock)
+    }
+
+    fun canAuthenticate(): Boolean = getSystemService(android.app.KeyguardManager::class.java)?.isDeviceSecure == true
+
+    /** Fingerprint, face or the phone's PIN / pattern / password. */
+    fun authenticate(title: String, subtitle: String? = null, cb: (Boolean) -> Unit) {
+        if (authInFlight) return
+        val km = getSystemService(android.app.KeyguardManager::class.java)
+        if (km == null || !km.isDeviceSecure) { cb(false); return }
+        authInFlight = true
+        if (Build.VERSION.SDK_INT >= 30) {
+            val b = android.hardware.biometrics.BiometricPrompt.Builder(this)
+                .setTitle(title)
+                .setAllowedAuthenticators(
+                    android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                        android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+                )
+            if (subtitle != null) b.setSubtitle(subtitle)
+            b.build().authenticate(android.os.CancellationSignal(), mainExecutor, object : android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: android.hardware.biometrics.BiometricPrompt.AuthenticationResult?) {
+                    authInFlight = false; cb(true)
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                    authInFlight = false; cb(false)
+                }
+            })
+        } else {
+            @Suppress("DEPRECATION")
+            val i = km.createConfirmDeviceCredentialIntent(title, subtitle)
+            if (i == null) { authInFlight = false; cb(true); return }
+            authCb = cb
+            runCatching { credLauncher.launch(i) }.onFailure { authInFlight = false; authCb = null; cb(false) }
+        }
+    }
+
+    private fun unlock() {
+        if (!Prefs.appLock) { locked = false; return }
+        // The phone's screen lock was removed, so there's nothing to check against: let the user in.
+        if (!canAuthenticate()) { locked = false; snack("App lock is paused: your phone has no screen lock"); return }
+        authenticate("Unlock Ark") { ok -> if (ok) locked = false }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleIntent(intent)
+        Fire.whenReady { handleIntent(intent) }
     }
 
     private fun handleIntent(i: Intent?) {
@@ -207,7 +299,7 @@ class MainActivity : ComponentActivity(), Host {
             if (extras.isNotEmpty()) putExtra(Intent.EXTRA_INITIAL_INTENTS, extras.toTypedArray())
         }
         val needCam = extras.isNotEmpty() && ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
-        val go = { runCatching { fileLauncher.launch(launch) }.onFailure { fileCb = null; cb(null) } }
+        val go = { ownSheetOpen = true; runCatching { fileLauncher.launch(launch) }.onFailure { ownSheetOpen = false; fileCb = null; cb(null) } }
         if (needCam) requestAndroidPermissions(arrayOf(android.Manifest.permission.CAMERA)) { go() } else go()
     }
 
@@ -256,7 +348,8 @@ class MainActivity : ComponentActivity(), Host {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, "Search or say a website")
-        runCatching { voiceLauncher.launch(i) }.onFailure { snack("Voice input isn't available on this device") }
+        ownSheetOpen = true
+        runCatching { voiceLauncher.launch(i) }.onFailure { ownSheetOpen = false; snack("Voice input isn't available on this device") }
     }
 
     fun askNotificationsOnce() {

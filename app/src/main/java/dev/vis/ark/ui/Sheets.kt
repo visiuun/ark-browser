@@ -69,6 +69,7 @@ import dev.vis.ark.browser.Downloads
 import dev.vis.ark.browser.Engine
 import dev.vis.ark.browser.Summarizer
 import dev.vis.ark.browser.Tab
+import dev.vis.ark.browser.Req
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -443,6 +444,21 @@ fun SiteSettingsContent(tab: Tab, onDone: () -> Unit) {
             }
         }
 
+        val site = dev.vis.ark.browser.Fire.siteOf(tab.url)
+        if (dev.vis.ark.data.Prefs.forget && !tab.private && site.isNotBlank()) {
+            SectionLabel("Fire mode")
+            val proof = site in dev.vis.ark.data.Prefs.fireproof
+            ToggleRow(
+                "Fireproof $site", proof, 0, 1,
+                if (proof) "Stays signed in when Ark forgets everything else" else "Will be erased, and signed out, when Ark closes",
+            ) { on ->
+                if (on) dev.vis.ark.data.Prefs.setFireproof(site, true)
+                else Browser.push(Req.Confirm("Stop fireproofing $site?", "You'll be signed out of $site, and its data erased, the next time Ark closes.", "Remove") {
+                    dev.vis.ark.data.Prefs.setFireproof(site, false)
+                })
+            }
+        }
+
         SectionLabel("This tab")
         ToggleRow("JavaScript", tab.javascript, 0, 3) { on ->
             tab.javascript = on; tab.session?.settings?.setAllowJavascript(on); tab.session?.reload()
@@ -455,10 +471,13 @@ fun SiteSettingsContent(tab: Tab, onDone: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = {
-                val f = StorageController.ClearFlags.COOKIES or StorageController.ClearFlags.DOM_STORAGES or StorageController.ClearFlags.AUTH_SESSIONS or StorageController.ClearFlags.ALL_CACHES
-                Engine.runtime.storageController.clearDataFromBaseDomain(tab.host, f).accept {
-                    Browser.host?.snack("Cleared cookies and site data for ${tab.host}"); tab.session?.reload()
-                }
+                val h = tab.host
+                Browser.push(Req.Confirm("Clear data for $h?", "This signs you out of $h and erases its cookies and saved data. It can't be undone.", "Clear") {
+                    val f = StorageController.ClearFlags.COOKIES or StorageController.ClearFlags.DOM_STORAGES or StorageController.ClearFlags.AUTH_SESSIONS or StorageController.ClearFlags.ALL_CACHES
+                    Engine.runtime.storageController.clearDataFromBaseDomain(h, f).accept {
+                        Browser.host?.snack("Cleared cookies and site data for $h"); tab.session?.reload()
+                    }
+                })
                 onDone()
             }) { MIcon(Sym.Delete, null); Spacer(Modifier.width(8.dp)); Text("Clear site data") }
             OutlinedButton(onClick = { Browser.newTab("view-source:" + tab.url, tab.private); onDone() }) {

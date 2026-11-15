@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import dev.vis.ark.data.Prefs
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -180,6 +181,32 @@ fun PromptHost() {
             confirmButton = { TextButton({ req.action(); done() }) { Text(req.confirm) } },
             dismissButton = { TextButton(done) { Text("Cancel") } },
         )
+
+        is Req.Fireproof -> {
+            val names = req.sites.joinToString(" and ")
+            val one = req.sites.size == 1
+            AlertDialog(
+                onDismissRequest = done,
+                icon = { MIcon("*" + Sym.Fire, null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Fireproof $names?") },
+                text = {
+                    Text(
+                        "Fireproofed sites keep their cookies, so you stay signed in. If you don't, Ark erases " +
+                            (if (one) "this sign-in" else "these sign-ins") + " along with everything else when it closes, and you'll have to sign in again.",
+                    )
+                },
+                confirmButton = {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                        androidx.compose.material3.Button({ req.sites.forEach { Prefs.setFireproof(it, true) }; done() }, Modifier.fillMaxWidth()) { Text("Fireproof") }
+                        TextButton(done, Modifier.fillMaxWidth()) { Text("Not now") }
+                        TextButton({ req.sites.forEach { Prefs.neverFireproof(it) }; done() }, Modifier.fillMaxWidth()) {
+                            Text(if (one) "Don't ask again for this site" else "Don't ask again for these sites")
+                        }
+                    }
+                },
+                properties = DialogProperties(dismissOnClickOutside = false),
+            )
+        }
 
         is Req.Context -> Unit // shown as a sheet by ArkRoot
     }

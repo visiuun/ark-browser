@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -101,6 +102,9 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
     var engineDialog by remember { mutableStateOf(false) }
     var dohDialog by remember { mutableStateOf(false) }
     var clearDialog by remember { mutableStateOf(false) }
+    var fireOnDialog by remember { mutableStateOf(false) }
+    var fireproofDialog by remember { mutableStateOf(false) }
+    var burnDialog by remember { mutableStateOf(false) }
     val cs = MaterialTheme.colorScheme
     fun apply() = Engine.applySettings()
     LaunchedEffect(Unit) { Engine.refreshExtensions() }
@@ -221,15 +225,53 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             item { ToggleRow("HTTPS-only mode", Prefs.httpsOnly, 1, 6, "Upgrade every connection to HTTPS") { Prefs.httpsOnly = it; apply() } }
             item { ToggleRow("Global Privacy Control", Prefs.gpc, 2, 6, "Tell sites not to sell or share your data") { Prefs.gpc = it; apply() } }
             item { ToggleRow("Safe Browsing", Prefs.safeBrowsing, 3, 6, "Warn about phishing and malware") { Prefs.safeBrowsing = it; apply() } }
-            item { ClickRow("Secure DNS (DNS over HTTPS)", Engine.DOH.getOrElse(Prefs.doh) { Engine.DOH[0] }.name, 4, 6) { dohDialog = true } }
+            item { ClickRow("Secure DNS (DNS over HTTPS)", Engine.dohName(), 4, 6) { dohDialog = true } }
             item { ClickRow("Clear browsing data", "History, cookies, cache, permissions", 5, 6) { clearDialog = true } }
+
+            item { SectionLabel("Forget & lock") }
+            val fireRows = if (Prefs.forget) 5 else 2
+            item {
+                ToggleRow(
+                    "Forget everything when closed", Prefs.forget, 0, fireRows,
+                    "Every start is a blank slate, like DuckDuckGo: tabs, history, cookies and sign-ins are erased. Fireproofed sites stay signed in.",
+                ) { on -> if (on) fireOnDialog = true else Prefs.forget = false }
+            }
+            if (Prefs.forget) {
+                item { ToggleRow("Ask to fireproof after signing in", Prefs.fireAsk, 1, fireRows, "Offers to keep a site signed in right after you sign in to it") { Prefs.fireAsk = it } }
+                item {
+                    val n = Prefs.fireproof.size
+                    ClickRow("Fireproofed sites", if (n == 0) "None yet: every site is forgotten" else "$n ${if (n == 1) "site stays" else "sites stay"} signed in", 2, fireRows) { fireproofDialog = true }
+                }
+                item { ClickRow("Forget now", "Erase this session and start fresh", 3, fireRows) { burnDialog = true } }
+            }
+            item {
+                ToggleRow(
+                    "App lock", Prefs.appLock, fireRows - 1, fireRows,
+                    "Fingerprint, face or your screen lock to open Ark. Hides Ark's preview in Recents on Android 13+.",
+                ) { on ->
+                    if (!on) {
+                        Prefs.appLock = false; activity.applyRecentsPrivacy()
+                    } else if (!activity.canAuthenticate()) {
+                        Browser.host?.snack("Set up a screen lock or fingerprint in Android settings first", "Settings") {
+                            runCatching { activity.startActivity(android.content.Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)) }
+                        }
+                    } else activity.authenticate("Turn on app lock", "Confirm it's you") { ok ->
+                        if (ok) { Prefs.appLock = true; activity.applyRecentsPrivacy() }
+                    }
+                }
+            }
 
             item { SectionLabel("Sites") }
             item { ToggleRow("JavaScript", Prefs.javascript, 0, 5) { Prefs.javascript = it; apply() } }
             item { ToggleRow("Always allow zoom", Prefs.forceZoom, 1, 5, "Pinch-zoom even when a site blocks it") { Prefs.forceZoom = it; apply() } }
             item { ChoiceGroup("Autoplay", listOf("Allow", "No sound", "Block"), Prefs.autoplay, index = 2, count = 5) { Prefs.autoplay = it } }
             item { ToggleRow("Desktop site by default", Prefs.desktopDefault, 3, 5) { Prefs.desktopDefault = it } }
-            item { ToggleRow("Restore tabs on launch", Prefs.restoreTabs, 4, 5) { Prefs.restoreTabs = it } }
+            item {
+                ToggleRow(
+                    "Restore tabs on launch", Prefs.restoreTabs && !Prefs.forget, 4, 5,
+                    if (Prefs.forget) "Off while Forget everything when closed is on" else null, enabled = !Prefs.forget,
+                ) { Prefs.restoreTabs = it }
+            }
 
             item { SectionLabel("Your stuff") }
             item { ClickRow("History", "${runCatching { HistoryStore.count() }.getOrDefault(0)} pages", 0, 3) { onOpen(Screen.History) } }
@@ -252,7 +294,9 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             item {
                 SettingBlock("Ark ${dev.vis.ark.BuildConfig.VERSION_NAME}", 0, 1) {
                     Text(
-                        "Engine: Mozilla GeckoView ${org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION} (Firefox)\n" +
+                        "By visiuun · github.com/visiuun/ark-browser\n" +
+                            "Free for noncommercial use: PolyForm Noncommercial 1.0.0 + Ark terms, credit required\n\n" +
+                            "Engine: Mozilla GeckoView ${org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION} (Firefox)\n" +
                             "UI: Material 3 Expressive\n" +
                             "Data: Open-Meteo, OpenStreetMap Nominatim, Wikipedia, Hacker News, DuckDuckGo suggestions — all free, no accounts.",
                         style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
@@ -281,11 +325,31 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
         onDismissRequest = { dohDialog = false },
         title = { Text("Secure DNS") },
         text = {
-            Column {
+            var custom by remember { mutableStateOf(Prefs.dohCustom.ifBlank { "https://" }) }
+            var editing by remember { mutableStateOf(Prefs.doh == Engine.DOH_CUSTOM) }
+            val ok = Engine.validDoh(custom)
+            val showError = !ok && custom.length > 8
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                 Engine.DOH.forEachIndexed { i, d ->
                     Row(Modifier.fillMaxWidth().clip(CircleShape).clickable { Prefs.doh = i; Engine.applySettings(); dohDialog = false }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(Prefs.doh == i, null); Spacer(Modifier.width(10.dp)); Text(d.name)
+                        RadioButton(Prefs.doh == i && !editing, null); Spacer(Modifier.width(10.dp)); Text(d.name)
                     }
+                }
+                Row(Modifier.fillMaxWidth().clip(CircleShape).clickable { editing = true }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(editing, null); Spacer(Modifier.width(10.dp)); Text("Custom")
+                }
+                if (editing) {
+                    OutlinedTextField(
+                        custom, { custom = it.trim() }, singleLine = true, shape = RoundedCornerShape(16.dp),
+                        label = { Text("Resolver URL") }, isError = showError,
+                        supportingText = { Text(if (showError) "Needs a full https:// address" else "e.g. https://dns.example.com/dns-query") },
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    )
+                    TextButton(
+                        onClick = { Prefs.dohCustom = custom; Prefs.doh = Engine.DOH_CUSTOM; Engine.applySettings(); dohDialog = false },
+                        enabled = ok, modifier = Modifier.align(Alignment.End),
+                    ) { Text("Use this resolver") }
                 }
             }
         },
@@ -293,6 +357,111 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
     )
 
     if (clearDialog) ClearDataDialog { clearDialog = false }
+    if (fireOnDialog) FireOnDialog { fireOnDialog = false }
+    if (fireproofDialog) FireproofDialog { fireproofDialog = false }
+    if (burnDialog) AlertDialog(
+        onDismissRequest = { burnDialog = false },
+        icon = { MIcon("*" + Sym.Fire, null, tint = cs.error) },
+        title = { Text("Forget everything now?") },
+        text = {
+            val n = Prefs.fireproof.size
+            Text(
+                "This closes all your tabs and erases history, cookies, site data and sign-ins right now. It can't be undone." +
+                    if (n > 0) " Your $n fireproofed ${if (n == 1) "site stays" else "sites stay"} signed in." else "",
+            )
+        },
+        confirmButton = {
+            TextButton({ burnDialog = false; onBack(); dev.vis.ark.browser.Fire.burn { Browser.host?.snack("Everything was erased") } }) { Text("Forget everything", color = cs.error) }
+        },
+        dismissButton = { TextButton({ burnDialog = false }) { Text("Cancel") } },
+    )
+}
+
+/** Turning fire mode on: say plainly what will be lost, and let the user keep the sites they're signed in to. */
+@Composable
+private fun FireOnDialog(onDone: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val open = remember {
+        Browser.tabs.filter { !it.private }.map { dev.vis.ark.browser.Fire.siteOf(it.url) }
+            .filter { it.isNotBlank() && it !in Prefs.fireproof }.distinct()
+    }
+    val keep = remember { mutableStateListOf<String>() }
+    AlertDialog(
+        onDismissRequest = onDone,
+        icon = { MIcon("*" + Sym.Fire, null, tint = cs.error) },
+        title = { Text("Forget everything when closed?") },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Text(
+                    "Every time Ark closes and starts again, it erases your tabs, history, cookies, site data and " +
+                        "permissions. You'll be signed out of every site that isn't fireproofed.",
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "That includes everything you have open and saved right now, the next time Ark closes. It can't be undone.",
+                    color = cs.error, style = MaterialTheme.typography.bodyMedium,
+                )
+                if (open.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    Text("Keep signed in to:", style = MaterialTheme.typography.titleSmall)
+                    open.forEach { site ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(CircleShape).clickable { if (site in keep) keep.remove(site) else keep.add(site) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) { Checkbox(site in keep, null); Spacer(Modifier.width(8.dp)); Text(site) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton({
+                keep.forEach { Prefs.setFireproof(it, true) }
+                Prefs.forget = true
+                Browser.saveNow()
+                Browser.host?.snack("Ark will forget everything when it closes")
+                onDone()
+            }) { Text("Turn on", color = cs.error) }
+        },
+        dismissButton = { TextButton(onDone) { Text("Cancel") } },
+    )
+}
+
+/** The fireproofed sites, each removable (with a warning that it'll be signed out). */
+@Composable
+private fun FireproofDialog(onDone: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    var removing by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDone,
+        icon = { MIcon("*" + Sym.Fire, null, tint = cs.primary) },
+        title = { Text("Fireproofed sites") },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Text(
+                    "These keep their cookies and sign-ins when Ark forgets everything else. Fireproof a site from its site info (the icon left of the address), or when Ark asks after you sign in.",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                if (Prefs.fireproof.isEmpty()) Text("No sites yet.")
+                Prefs.fireproof.toList().forEach { site ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(site, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        IconButton({ removing = site }) { MIcon(Sym.Close, "Remove $site") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onDone) { Text("Done") } },
+    )
+    removing?.let { site ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("Stop fireproofing $site?") },
+            text = { Text("You'll be signed out of $site, and its data erased, the next time Ark closes.") },
+            confirmButton = { TextButton({ Prefs.setFireproof(site, false); removing = null }) { Text("Remove", color = cs.error) } },
+            dismissButton = { TextButton({ removing = null }) { Text("Keep") } },
+        )
+    }
 }
 
 @Composable
@@ -320,7 +489,7 @@ private fun ClearDataDialog(onDone: () -> Unit) {
                 if (checked[3]) flags = flags or StorageController.ClearFlags.PERMISSIONS
                 if (flags != 0L) Engine.runtime.storageController.clearData(flags)
                 if (checked[4]) Downloads.clear()
-                if (checked[5]) { Browser.closeAll(false); Browser.closeAll(true) }
+                if (checked[5]) { Browser.closeAll(false, undoable = false); Browser.closeAll(true, undoable = false) }
                 Browser.host?.snack("Browsing data cleared")
                 onDone()
             }) { Text("Clear") }

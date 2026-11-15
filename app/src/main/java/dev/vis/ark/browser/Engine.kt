@@ -35,10 +35,27 @@ object Engine {
         Doh("AdGuard (ad-block)", "https://dns.adguard-dns.com/dns-query"),
         Doh("NextDNS", "https://firefox.dns.nextdns.io/"),
     )
+    /** Prefs.doh value meaning "use the resolver in Prefs.dohCustom". */
+    val DOH_CUSTOM get() = DOH.size
+
+    /** Whether a typed resolver address looks usable: DNS over HTTPS needs an https:// URL with a host. */
+    fun validDoh(url: String): Boolean = runCatching {
+        val u = java.net.URI(url.trim())
+        u.scheme.equals("https", true) && !u.host.isNullOrBlank()
+    }.getOrDefault(false)
+
+    /** The resolver in use (null = system DNS) and its display name. */
+    fun dohUri(): String? =
+        if (Prefs.doh == DOH_CUSTOM) Prefs.dohCustom.trim().takeIf { validDoh(it) }
+        else DOH.getOrElse(Prefs.doh) { DOH[0] }.uri
+
+    fun dohName(): String =
+        if (Prefs.doh == DOH_CUSTOM) "Custom · " + (runCatching { java.net.URI(Prefs.dohCustom.trim()).host }.getOrNull() ?: Prefs.dohCustom)
+        else DOH.getOrElse(Prefs.doh) { DOH[0] }.name
 
     fun init(ctx: Context) {
         if (isReady) return
-        val doh = DOH.getOrElse(Prefs.doh) { DOH[0] }
+        val doh = dohUri()
         val builder = GeckoRuntimeSettings.Builder()
             .javaScriptEnabled(Prefs.javascript)
             .contentBlocking(contentBlocking())
@@ -57,7 +74,7 @@ object Engine {
             .extensionsWebAPIEnabled(true)
             .extensionsProcessEnabled(true)
             .allowInsecureConnections(if (Prefs.httpsOnly) GeckoRuntimeSettings.HTTPS_ONLY else GeckoRuntimeSettings.ALLOW_ALL)
-        if (doh.uri != null) builder.trustedRecursiveResolverMode(GeckoRuntimeSettings.TRR_MODE_FIRST).trustedRecursiveResolverUri(doh.uri)
+        if (doh != null) builder.trustedRecursiveResolverMode(GeckoRuntimeSettings.TRR_MODE_FIRST).trustedRecursiveResolverUri(doh)
         runtime = GeckoRuntime.create(ctx.applicationContext, builder.build())
         // Extensions (uBlock Origin compiling its filter lists on first run) must never be killed by the
         // slow-script watchdog; on slower phones that would leave the ad blocker half-started.
@@ -84,6 +101,7 @@ object Engine {
         ctrl.ensureBuiltIn("resource://android/assets/ark/", "ark-helper@vis.dev").accept({ ext ->
             if (ext != null) {
                 helper = ext
+                ext.setMessageDelegate(Fire.background, "arkbg")
                 waiting.forEach { it(ext) }
                 waiting.clear()
             }
@@ -221,9 +239,9 @@ object Engine {
         s.setFontSizeFactor(Prefs.fontScale)
         s.setGlobalPrivacyControl(Prefs.gpc)
         s.setAllowInsecureConnections(if (Prefs.httpsOnly) GeckoRuntimeSettings.HTTPS_ONLY else GeckoRuntimeSettings.ALLOW_ALL)
-        val doh = DOH.getOrElse(Prefs.doh) { DOH[0] }
-        if (doh.uri != null) {
-            s.setTrustedRecursiveResolverUri(doh.uri)
+        val doh = dohUri()
+        if (doh != null) {
+            s.setTrustedRecursiveResolverUri(doh)
             s.setTrustedRecursiveResolverMode(GeckoRuntimeSettings.TRR_MODE_FIRST)
         } else s.setTrustedRecursiveResolverMode(GeckoRuntimeSettings.TRR_MODE_OFF)
         val cb = s.contentBlocking

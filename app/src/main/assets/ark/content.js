@@ -92,6 +92,29 @@
     }
   });
 
+  // Sign-in detection for fire mode: a form with a filled-in password being submitted, or a button pressed
+  // next to one (sites that sign in with script instead of a real form submit).
+  let lastLogin = 0;
+  const login = () => {
+    const now = Date.now();
+    if (now - lastLogin < 3000) return;
+    lastLogin = now;
+    port.postMessage({ type: "login", url: location.href });
+  };
+  const filledPassword = (root) => [...(root || document).querySelectorAll('input[type="password"]')].some(i => i.value && i.value.length > 0);
+  document.addEventListener("submit", (e) => { if (filledPassword(e.target)) login(); }, true);
+  document.addEventListener("click", (e) => {
+    const b = e.target && e.target.closest && e.target.closest('button, input[type="submit"], input[type="button"], [role="button"]');
+    if (!b || !filledPassword(b.form || document)) return;
+    const label = ((b.innerText || b.value || "") + " " + (b.getAttribute("aria-label") || "")).toLowerCase();
+    if (/show|hide|reveal|visib|forgot|cancel|back/.test(label)) return;
+    const submits = b.tagName === "BUTTON" ? (b.getAttribute("type") || "submit") === "submit" && b.form : b.type === "submit";
+    if (submits || /log ?in|sign ?in|continue|next|submit|enter|verify|connexion|anmelden|iniciar|entrar|accedi/.test(label)) login();
+  }, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target && e.target.type === "password" && e.target.value) login();
+  }, true);
+
   meta();
   const mo = new MutationObserver(() => { clearTimeout(window.__arkMeta); window.__arkMeta = setTimeout(meta, 400); });
   const head = document.head;

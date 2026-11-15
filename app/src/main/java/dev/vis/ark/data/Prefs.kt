@@ -21,6 +21,8 @@ object Prefs {
         sp = ctx.applicationContext.getSharedPreferences("ark", Context.MODE_PRIVATE)
         loadPins()
         loadZoom()
+        fireproof.addAll(loadSet("fireproof"))
+        fireNever.addAll(loadSet("fireNever"))
     }
 
     private class Pref<T>(val key: String, val def: T) : ReadWriteProperty<Any?, T> {
@@ -76,10 +78,14 @@ object Prefs {
     var etp by Pref("etp", 1)                      // 0 off, 1 standard, 2 strict
     var httpsOnly by Pref("httpsOnly", false)
     var gpc by Pref("gpc", true)
-    var doh by Pref("doh", 0)                      // index into Engine.DOH
+    var doh by Pref("doh", 0)                      // index into Engine.DOH; Engine.DOH_CUSTOM uses dohCustom
+    var dohCustom by Pref("dohCustom", "")         // user's own DNS-over-HTTPS resolver URL
     var safeBrowsing by Pref("safeBrowsing", true)
     var adBlock by Pref("adBlock", true)
     var adBlockChecked by Pref("adBlockChecked", "0")
+    var forget by Pref("forget", false)            // fire mode: erase everything (but fireproofed sites) whenever Ark closes
+    var fireAsk by Pref("fireAsk", true)           // offer to fireproof a site after signing in to it
+    var appLock by Pref("appLock", false)          // fingerprint / face / screen lock to open Ark
 
     // Sites
     var javascript by Pref("javascript", true)
@@ -143,6 +149,31 @@ object Prefs {
 
     private fun sameUrl(a: String, b: String) = a.trimEnd('/') == b.trimEnd('/')
 
+    // Fire mode: sites that keep their cookies and logins, sites never to ask about, and every site
+    // that may have stored something since the last burn.
+    val fireproof = mutableStateListOf<String>()
+    val fireNever = mutableStateListOf<String>()
+
+    private fun loadSet(key: String): List<String> {
+        val arr = runCatching { JSONArray(sp.getString(key, "[]")) }.getOrDefault(JSONArray())
+        return (0 until arr.length()).map { arr.getString(it) }.distinct()
+    }
+
+    private fun saveSet(key: String, items: Collection<String>) = sp.edit { putString(key, JSONArray(items.distinct()).toString()) }
+
+    fun setFireproof(domain: String, on: Boolean) {
+        if (on) { if (domain !in fireproof) fireproof.add(domain); fireNever.remove(domain); saveSet("fireNever", fireNever) }
+        else fireproof.remove(domain)
+        saveSet("fireproof", fireproof)
+    }
+
+    fun neverFireproof(domain: String) { if (domain !in fireNever) { fireNever.add(domain); saveSet("fireNever", fireNever) } }
+
+    private val touched by lazy { loadSet("fireTouched").toMutableSet() }
+    fun touch(domain: String) { if (domain.isNotBlank() && touched.add(domain)) saveSet("fireTouched", touched) }
+    fun touchedSites(): Set<String> = touched.toSet()
+    fun clearTouched() { touched.clear(); saveSet("fireTouched", touched) }
+
     // Per-site zoom
     private val zoom = mutableMapOf<String, Float>()
     private fun loadZoom() {
@@ -151,6 +182,12 @@ object Prefs {
     }
 
     fun zoomFor(host: String) = zoom[host] ?: 1f
+    fun zoomHosts(): Set<String> = zoom.keys.toSet()
+    fun forgetZoom(keep: (String) -> Boolean) {
+        zoom.keys.removeAll { !keep(it) }
+        val o = JSONObject(); zoom.forEach { (k, v) -> o.put(k, v.toDouble()) }
+        sp.edit { putString("zoom", o.toString()) }
+    }
     fun setZoom(host: String, z: Float) {
         if (z == 1f) zoom.remove(host) else zoom[host] = z
         val o = JSONObject(); zoom.forEach { (k, v) -> o.put(k, v.toDouble()) }

@@ -19,6 +19,8 @@ object Sym {
     const val Description = "\uE873" // description
     const val DesktopWindows = "\uE30C" // desktop_windows
     const val Download = "\uF090" // download
+    const val Fingerprint = "" // fingerprint
+    const val Fire = "" // local_fire_department
     const val Extension = "\uE87B" // extension
     const val FindInPage = "\uE880" // find_in_page
     const val FolderOpen = "\uE2C8" // folder_open

@@ -15,7 +15,7 @@ No ads, no tracking, no account. Everything the web asks for actually works.
 
 <img src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+">
 <img src="https://img.shields.io/badge/engine-GeckoView%20(Firefox)-ff7139?style=flat-square&logo=firefox&logoColor=white" alt="GeckoView">
-<img src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-black?style=flat-square" alt="CC BY-NC 4.0">
+<img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%20%2B%20credit-black?style=flat-square" alt="PolyForm Noncommercial 1.0.0 + Ark terms">
 <img src="https://img.shields.io/badge/written%20in-Kotlin%20%2B%20Compose-black?style=flat-square" alt="Kotlin + Jetpack Compose">
 
 </div>
@@ -99,11 +99,17 @@ The whole UI is built on Google's Material 3 Expressive — connected button gro
 
 Ark checks GitHub releases once a day. When a new version is out you get a notification (if you allow it) and an **Update available** card on the home screen and in Settings. Tap **Update now**: it downloads the APK built for your phone's CPU and hands it to Android's installer — your tabs, pins and settings stay. Turn this off under **Settings › Updates**.
 
+## Forget everything, lock everything
+
+- **Forget everything when closed** (Settings › Forget & lock): like DuckDuckGo, every start is a blank slate. Close Ark and it erases your tabs, history, cookies, site data, caches and permissions, so it's private browsing all the time. Ark warns you before turning it on and lets you keep the sites you're signed in to.
+- **Fireproofing**: right after you sign in to a site, Ark asks whether to fireproof it: **Fireproof**, **Not now** or **Don't ask again**. Fireproofed sites keep their cookies and stay signed in; everything else goes. Manage them in Settings or from a site's info sheet.
+- **App lock**: open Ark with your fingerprint, face or screen lock. Ark locks when you leave it, and on Android 13+ its preview in Recents is hidden.
+
 ## Privacy
 
 - No analytics, no telemetry, no account, no Google Play Services.
 - Once a day Ark asks GitHub whether a newer release exists (it sends only the app version). You can turn this off.
-- Enhanced Tracking Protection, HTTPS-only mode, Global Privacy Control and optional encrypted DNS (DNS over HTTPS) are all built in.
+- Enhanced Tracking Protection, HTTPS-only mode, Global Privacy Control and optional encrypted DNS (DNS over HTTPS: Cloudflare, Quad9, Mullvad, AdGuard, NextDNS or any resolver URL you enter) are all built in.
 - Private tabs keep no history, cookies or cache.
 - Websites see Firefox's normal user agent with `Ark/<version>` added at the end (like Edge adds `Edg/`). Turn it off in **Settings › Advanced** if a site misbehaves.
 
@@ -131,6 +137,12 @@ Requires JDK 17 and the Android SDK (compileSdk 37). A shared signing key is inc
 
 ## License
 
-[CC BY-NC 4.0](LICENSE). Bundled components keep their own licenses (see [LICENSE](LICENSE)).
+Ark is **free for noncommercial use, and credit is mandatory**: [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) plus the Ark Additional Terms, both in [LICENSE](LICENSE).
+
+- **You can** use Ark as your browser (at home or at work), read and modify the code, share it for free, and fork it under your own name. Schools, charities, research and reviews are all fine.
+- **You must** credit "Based on Ark by visiuun" with a link to this repo, both inside your app and wherever you offer it, and keep the license with every copy.
+- **You can't**, without written permission: sell it, add ads or paid placements, monetize user data, ship it in a for-profit product, or pass a fork off as Ark.
+
+Releases before 1.5.0 were published under CC BY-NC 4.0. Bundled components (GeckoView, uBlock Origin, Material Symbols) keep their own licenses, listed in [LICENSE](LICENSE).
 
 Not affiliated with The Browser Company or Arc. "Arc" is referenced only to describe the layout this app reproduces.

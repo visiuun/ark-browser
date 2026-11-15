@@ -75,6 +75,7 @@ class Tab(
                 o.optString("icon").takeIf { it.startsWith("http") }?.let { iconUrl = it }
             }
             "text" -> { pending?.invoke(o); pending = null }
+            "login" -> Fire.loginSeen(this, runCatching { Uri.parse(o.optString("url")).host }.getOrNull() ?: host)
         }
     }
 
