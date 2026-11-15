@@ -112,8 +112,8 @@ fun ArkRoot(activity: MainActivity) {
         val s = MainActivity.snack ?: return@LaunchedEffect
         snackHost.currentSnackbarData?.dismiss()
         // Compose's own durations (4 s, or 10 s with a button) linger far too long for quick notes like
-        // "Downloading…"; time them out ourselves: 2.5 s, or 4 s when there's a button to reach.
-        val res = kotlinx.coroutines.withTimeoutOrNull(if (s.action != null) 4000L else 2500L) {
+        // "Downloading…" or "Closed tab"; time them out ourselves: 2 s, or 3 s when there's a button to reach.
+        val res = kotlinx.coroutines.withTimeoutOrNull(if (s.action != null) 3000L else 2000L) {
             snackHost.showSnackbar(s.message, s.action, withDismissAction = false, duration = SnackbarDuration.Indefinite)
         }
         if (res == SnackbarResult.ActionPerformed) s.onAction?.invoke()
@@ -310,7 +310,16 @@ fun ArkRoot(activity: MainActivity) {
 
         PromptHost()
 
-        SnackbarHost(snackHost, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp))
+        // Swipe a snackbar sideways (or tap its text) to get rid of it straight away.
+        SnackbarHost(snackHost, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp)) { data ->
+            val swipe = androidx.compose.material3.rememberSwipeToDismissBoxState()
+            androidx.compose.material3.SwipeToDismissBox(
+                swipe, backgroundContent = {},
+                onDismiss = { data.dismiss() },
+            ) {
+                androidx.compose.material3.Snackbar(data, Modifier.pointerInputTap { data.dismiss() })
+            }
+        }
     }
 }
 }
