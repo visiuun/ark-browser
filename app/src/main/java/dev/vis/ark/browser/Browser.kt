@@ -91,6 +91,9 @@ object Browser {
 
     fun showBar() { barHidden = false; scrollRun = 0 }
 
+    /** Set when a tab's error page asks to edit its address; the UI opens the search sheet prefilled and clears it. */
+    var editRequest by mutableStateOf<Long?>(null)
+
     /** Scrolling down hides the bar, scrolling back up (or reaching the top) brings it back. */
     private fun onScroll(t: Tab, y: Int) {
         if (t.id != currentId) return
@@ -290,6 +293,8 @@ object Browser {
         s.navigationDelegate = object : NavigationDelegate {
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (url == null) return
+                // Our own retry/error pages stand in for the address that failed; keep that address as the tab's URL.
+                if (url == t.errorPage) return
                 val hostChanged = hostOf(url) != hostOf(t.url)
                 t.url = url
                 if (!t.private) Prefs.touch(Fire.siteOf(url))
@@ -305,6 +310,11 @@ object Browser {
                 if (request.uri == RETRY_URI) {
                     t.failedUri = null
                     main.post { session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE) }
+                    return GeckoResult.deny()
+                }
+                // "Edit address" on an error page: bring back the address bar with the failed address in it.
+                if (request.uri == EDIT_URI) {
+                    main.post { editRequest = t.id }
                     return GeckoResult.deny()
                 }
                 val scheme = request.uri.substringBefore(':').lowercase()
@@ -339,10 +349,11 @@ object Browser {
                 if (transient && u.isNotBlank() && (t.autoRetried != u || now - t.autoRetriedAt > 30_000)) {
                     t.autoRetried = u; t.autoRetriedAt = now
                     main.postDelayed({ if (t.session === session && session.isOpen) session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE) }, 700)
-                    return GeckoResult.fromValue(retryPage(u))
+                    return GeckoResult.fromValue(retryPage(u).also { t.errorPage = it })
                 }
-                t.failedUri = u
-                return GeckoResult.fromValue(errorPage(u, error))
+                t.failedUri = u; t.failedAt = now; t.editOffered = false
+                if (t.id == currentId) main.post { showBar() }
+                return GeckoResult.fromValue(errorPage(u, error).also { t.errorPage = it })
             }
         }
 
@@ -352,6 +363,8 @@ object Browser {
 
         s.progressDelegate = object : ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
+                // A new load (not the error page that just replaced a failed one) means the error is gone.
+                if (t.failedUri != null && url != t.errorPage && (url != t.failedUri || System.currentTimeMillis() - t.failedAt > 1500)) t.failedUri = null
                 t.loading = true; t.progress = 8; t.blockedCount = 0; t.blockedHosts.clear(); t.offerTranslate = false
                 t.translation = null
                 if (t.id == currentId) { showBar(); scrollTab = -1L }
@@ -560,6 +573,8 @@ object Browser {
 
     /** Reserved address the error page's "Try again" button points at; onLoadRequest turns it into a fresh reload. */
     private const val RETRY_URI = "https://ark.invalid/retry"
+    /** Reserved address the error page's "Edit address" button points at; opens the address bar prefilled. */
+    private const val EDIT_URI = "https://ark.invalid/edit"
 
     private fun hostLabel(uri: String) = runCatching { Uri.parse(uri).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: "this site"
 
@@ -600,9 +615,10 @@ main{padding:32px;max-width:520px}
 h1{font-size:34px;line-height:1.1;margin:0 0 14px;font-weight:800;letter-spacing:-.5px}
 p{color:var(--mut);font-size:17px;line-height:1.5}
 code{display:block;word-break:break-all;color:var(--mut);font-size:13px;margin:18px 0 28px;opacity:.8}
-a{display:inline-block;background:var(--acc);color:var(--bg);padding:16px 28px;border-radius:999px;text-decoration:none;font-weight:700;font-size:16px}
+a{display:inline-block;background:var(--acc);color:var(--bg);padding:16px 28px;border-radius:999px;text-decoration:none;font-weight:700;font-size:16px;margin:0 8px 10px 0}
+a.alt{background:var(--chip);color:var(--fg)}
 </style></head><body><main><div class="blob">⚠︎</div><h1>${esc(title)}</h1><p>${esc(desc)}</p>
-<code>${esc(uri)} · error ${error.code}</code><a href="$RETRY_URI">Try again</a></main></body></html>"""
+<code>${esc(uri)} · error ${error.code}</code><a href="$EDIT_URI" class="alt">Edit address</a><a href="$RETRY_URI">Try again</a></main></body></html>"""
         return "data:text/html;charset=utf-8;base64," + Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
     }
 }

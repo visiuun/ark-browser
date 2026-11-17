@@ -95,6 +95,18 @@ fun ArkRoot(activity: MainActivity) {
     LaunchedEffect(MainActivity.pendingUpdate) {
         if (MainActivity.pendingUpdate) { sheet = null; switcher = false; screen = Screen.Settings; MainActivity.pendingUpdate = false }
     }
+    // Fix a mistyped address: the search sheet with the failed address in it, loading in the same tab.
+    fun editFailed(t: dev.vis.ark.browser.Tab) {
+        t.editOffered = true
+        switcher = false; screen = Screen.None; finding = false
+        sheet = Sheet.Search(t.failedUri ?: t.url, t.private, newTab = false)
+    }
+    // "Edit address" on an error page.
+    LaunchedEffect(Browser.editRequest) {
+        val id = Browser.editRequest ?: return@LaunchedEffect
+        Browser.editRequest = null
+        Browser.tabs.firstOrNull { it.id == id }?.takeIf { it.id == Browser.currentId }?.let { editFailed(it) }
+    }
     // New tab: Arc's search sheet, or the homepage when one is set (Settings › Home › Homepage).
     fun openNew(private: Boolean) {
         val home = homepageUrl()
@@ -174,6 +186,8 @@ fun ArkRoot(activity: MainActivity) {
             switcher -> switcher = false
             finding -> finding = false
             Browser.fullscreen -> t?.session?.exitFullScreen()
+            // A page that failed to load with nowhere to go back to: Back returns to the address bar to fix it.
+            t != null && t.failedUri != null && !t.canBack && !t.editOffered -> editFailed(t)
             t != null && t.canBack -> t.session?.goBack()
             t != null && t.parentId != null && Browser.tabs.any { it.id == t.parentId } -> Browser.close(t, undoable = false)
             else -> activity.moveTaskToBack(true)

@@ -51,6 +51,11 @@ class Tab(
 
     /** The address whose load just failed (its error page is showing), and when Ark last retried one by itself. */
     var failedUri: String? = null
+    var failedAt = 0L
+    /** The data: URI of the retry/error page now standing in for [failedUri]. */
+    var errorPage: String? = null
+    /** Back already reopened the address bar for this error once; the next Back behaves normally. */
+    var editOffered = false
     var autoRetried: String? = null
     var autoRetriedAt = 0L
 
