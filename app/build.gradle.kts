@@ -6,12 +6,16 @@ plugins {
 }
 
 // Release signing lives outside the repo: ~/.ark-signing/signing.properties (or the file named by
-// ARK_SIGNING) points at the keystores, passwords and key-rotation lineage. Without it, release builds
-// come out unsigned and debug builds use the normal Android debug key.
+// ARK_SIGNING) points at the keystore and password (new.store / new.alias / new.pass). Without it, release
+// builds come out unsigned and debug builds use the normal Android debug key.
 //
-// Ark rotated its signing key in 1.6.0 (APK Signature Scheme v3). Every release is signed by the original
-// key (so existing installs accept the update) plus the new key and the signed old->new lineage. Once a
-// phone has a rotated build, Android 9+ refuses updates signed only with the old key.
+// Releases are signed with the new key ONLY, with no rotation lineage. 1.6.0 shipped a v3 rotation
+// (old key -> new key), but then Android reports the original, leaked key as the app's identity
+// (signingCertificateHistory[0], which androidx CallingAppInfo checks against privileged-browser allow
+// lists) while Bitwarden & co. record the current key when you trust a browser. The two never match, so
+// every passkey request failed with "browser signature does not match". Phones on 1.6.0 accept a
+// new-key-only update and drop the old key from their history; phones still on 1.5.x or older must
+// install 1.6.0 first (or reinstall).
 val signing = Properties().apply {
     val f = file(System.getenv("ARK_SIGNING") ?: "${System.getProperty("user.home")}/.ark-signing/signing.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -28,8 +32,8 @@ android {
         applicationId = "dev.vis.ark"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.6.0"
+        versionCode = 19
+        versionName = "1.6.1"
         buildConfigField("String", "UPDATE_REPO", "\"visiuun/ark-browser\"")
     }
 
@@ -59,8 +63,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed after assembly with apksigner (below): Gradle can't sign with a rotation lineage.
-            signingConfig = null
+            signingConfig = if (hasSigning) signingConfigs.getByName("ark") else null
         }
         debug {
             if (hasSigning) signingConfig = signingConfigs.getByName("ark")
@@ -96,42 +99,4 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-}
-
-// Sign each release APK with the old key, the new key and the rotation lineage:
-// build/outputs/apk/<abi>/release/app-<abi>-release-unsigned.apk -> app-<abi>-release.apk
-if (hasSigning) {
-    afterEvaluate {
-        val sdk = androidComponents.sdkComponents.sdkDirectory.get().asFile
-        val tools = sdk.resolve("build-tools").listFiles()!!.filter { it.isDirectory }.maxBy { it.name }
-        val apksigner = tools.resolve(if (System.getProperty("os.name").startsWith("Windows")) "apksigner.bat" else "apksigner")
-        listOf("arm64", "x64").forEach { abi ->
-            tasks.named("assemble${abi.replaceFirstChar { it.uppercase() }}Release") {
-                doLast {
-                    val dir = layout.buildDirectory.dir("outputs/apk/$abi/release").get().asFile
-                    val unsigned = dir.resolve("app-$abi-release-unsigned.apk")
-                    val out = dir.resolve("app-$abi-release.apk")
-                    val cmd = listOf(
-                        apksigner.absolutePath, "sign",
-                        "--ks", signing.getProperty("old.store"), "--ks-key-alias", signing.getProperty("old.alias"),
-                        "--ks-pass", "env:ARK_OLD_PASS", "--key-pass", "env:ARK_OLD_PASS",
-                        "--next-signer",
-                        "--ks", signing.getProperty("new.store"), "--ks-key-alias", signing.getProperty("new.alias"),
-                        "--ks-pass", "env:ARK_NEW_PASS", "--key-pass", "env:ARK_NEW_PASS",
-                        "--lineage", signing.getProperty("lineage"),
-                        // Use the new key from Android 9 on (apksigner's default waits for Android 13).
-                        "--rotation-min-sdk-version", "28",
-                        "--out", out.absolutePath, unsigned.absolutePath,
-                    )
-                    val pb = ProcessBuilder(cmd).redirectErrorStream(true)
-                    pb.environment()["ARK_OLD_PASS"] = signing.getProperty("old.pass")
-                    pb.environment()["ARK_NEW_PASS"] = signing.getProperty("new.pass")
-                    val proc = pb.start()
-                    val log = proc.inputStream.bufferedReader().readText()
-                    if (proc.waitFor() != 0) throw GradleException("apksigner failed for $abi:\n$log")
-                    logger.lifecycle("Signed ${out.name} (rotated key)")
-                }
-            }
-        }
-    }
 }
