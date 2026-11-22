@@ -22,7 +22,7 @@ No ads, no tracking, no account. Everything the web asks for actually works.
 
 <br>
 
-<img src="docs/screenshots/hero.png" alt="Ark: home, a page, the Arc-style menu, settings with OLED black, and the card tab switcher" width="100%" />
+<img src="docs/screenshots/hero.png" alt="Ark: home, hanabot.xyz, the Arc-style menu, settings with OLED black, and the card tab switcher" width="100%" />
 
 ## At a glance
 
