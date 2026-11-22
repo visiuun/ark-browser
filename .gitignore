@@ -10,3 +10,8 @@ captures/
 *.hprof
 app/release/
 .kotlin/
+
+# Signing keys live in ~/.ark-signing, never in the repo
+*.jks
+*.keystore
+signing.properties
