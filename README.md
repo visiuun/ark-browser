@@ -22,12 +22,7 @@ No ads, no tracking, no account. Everything the web asks for actually works.
 
 <br>
 
-<p align="center">
-  <img src="docs/screenshots/01-home.png" width="23%" alt="Home: clock, pinned sites, weather, Wikipedia and Hacker News" />
-  <img src="docs/screenshots/03-menu.png" width="23%" alt="Arc-style menu sheet" />
-  <img src="docs/screenshots/04-settings.png" width="23%" alt="Material 3 Expressive settings with OLED toggle" />
-  <img src="docs/screenshots/05-tabs.png" width="23%" alt="Card tab switcher with live previews" />
-</p>
+<img src="docs/screenshots/hero.png" alt="Ark: home, a page, the Arc-style menu, settings with OLED black, and the card tab switcher" width="100%" />
 
 ## At a glance
 
