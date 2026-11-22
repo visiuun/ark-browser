@@ -79,7 +79,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Date
 
-enum class Screen { None, Settings, History, Downloads, Extensions }
+enum class Screen { None, Settings, History, Downloads, Extensions, Passwords }
 
 @Composable
 fun FullScreen(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}, content: @Composable () -> Unit) {
@@ -274,18 +274,28 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
             }
 
             item { SectionLabel("Your stuff") }
-            item { ClickRow("History", "${runCatching { HistoryStore.count() }.getOrDefault(0)} pages", 0, 3) { onOpen(Screen.History) } }
-            item { ClickRow("Downloads", "${Downloads.all().size} files", 1, 3) { onOpen(Screen.Downloads) } }
-            item { ClickRow("Add-ons", "${Engine.extensions.size} installed · uBlock Origin, Dark Reader…", 2, 3) { onOpen(Screen.Extensions) } }
+            item {
+                val n = dev.vis.ark.data.Vault.logins.size
+                ClickRow("Passwords, passkeys & autofill", if (n == 0) "Save passwords, cards and addresses · passkeys" else "$n saved ${if (n == 1) "password" else "passwords"} · passkeys · cards · addresses", 0, 4) { onOpen(Screen.Passwords) }
+            }
+            item { ClickRow("History", "${runCatching { HistoryStore.count() }.getOrDefault(0)} pages", 1, 4) { onOpen(Screen.History) } }
+            item { ClickRow("Downloads", "${Downloads.all().size} files", 2, 4) { onOpen(Screen.Downloads) } }
+            item { ClickRow("Add-ons", "${Engine.extensions.size} installed · uBlock Origin, Dark Reader…", 3, 4) { onOpen(Screen.Extensions) } }
 
             item { SectionLabel("Advanced") }
             item {
-                ToggleRow("Show Ark in user agent", Prefs.uaArk, 0, 3, "Websites see “Ark/${dev.vis.ark.BuildConfig.VERSION_NAME}” after Firefox. Turn off if a site misbehaves.") {
+                ToggleRow(
+                    "Experimental web features", Prefs.experimentalWeb, 0, 4,
+                    "WebGPU, CSS masonry, cross-page view transitions and Web MIDI before Firefox ships them on Android. Restart Ark after changing.",
+                ) { Prefs.experimentalWeb = it; apply() }
+            }
+            item {
+                ToggleRow("Show Ark in user agent", Prefs.uaArk, 1, 4, "Websites see “Ark/${dev.vis.ark.BuildConfig.VERSION_NAME}” after Firefox. Turn off if a site misbehaves.") {
                     Prefs.uaArk = it; Browser.applyUserAgent()
                 }
             }
-            item { ToggleRow("Remote debugging", Prefs.remoteDebugging, 1, 3, "Debug pages from desktop Firefox via USB") { Prefs.remoteDebugging = it; apply() } }
-            item { ClickRow("about:config", "Every Gecko preference, for experts", 2, 3) { Browser.newTab("about:config"); onBack() } }
+            item { ToggleRow("Remote debugging", Prefs.remoteDebugging, 2, 4, "Debug pages from desktop Firefox via USB") { Prefs.remoteDebugging = it; apply() } }
+            item { ClickRow("about:config", "Every Gecko preference, for experts", 3, 4) { Browser.newTab("about:config"); onBack() } }
 
             item { SectionLabel("Updates") }
             item { UpdateSection(onOpenPage = { Browser.open(it, inNewTab = true); onBack() }) }
@@ -499,7 +509,7 @@ private fun ClearDataDialog(onDone: () -> Unit) {
 }
 
 @Composable
-private fun SettingBlock(title: String, index: Int, count: Int, content: @Composable () -> Unit) {
+internal fun SettingBlock(title: String, index: Int, count: Int, content: @Composable () -> Unit) {
     Surface(shape = segmentShape(index, count), color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp)) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -510,7 +520,7 @@ private fun SettingBlock(title: String, index: Int, count: Int, content: @Compos
 }
 
 @Composable
-private fun ChoiceGroup(title: String, options: List<String>, selected: Int, enabled: Boolean = true, index: Int, count: Int, onSelect: (Int) -> Unit) {
+internal fun ChoiceGroup(title: String, options: List<String>, selected: Int, enabled: Boolean = true, index: Int, count: Int, onSelect: (Int) -> Unit) {
     SettingBlock(title, index, count) {
         Row(horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
             options.forEachIndexed { i, o ->
@@ -529,7 +539,7 @@ private fun ChoiceGroup(title: String, options: List<String>, selected: Int, ena
 }
 
 @Composable
-private fun ClickRow(title: String, subtitle: String?, index: Int, count: Int, onClick: () -> Unit) {
+internal fun ClickRow(title: String, subtitle: String?, index: Int, count: Int, onClick: () -> Unit) {
     Surface(onClick = onClick, shape = segmentShape(index, count), color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp)) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)

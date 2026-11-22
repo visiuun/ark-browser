@@ -76,6 +76,11 @@ object Engine {
             .allowInsecureConnections(if (Prefs.httpsOnly) GeckoRuntimeSettings.HTTPS_ONLY else GeckoRuntimeSettings.ALLOW_ALL)
         if (doh != null) builder.trustedRecursiveResolverMode(GeckoRuntimeSettings.TRR_MODE_FIRST).trustedRecursiveResolverUri(doh)
         runtime = GeckoRuntime.create(ctx.applicationContext, builder.build())
+        // Ark's password manager: GeckoView fills sign-in, address and payment forms from the encrypted vault.
+        dev.vis.ark.data.Vault.init(ctx)
+        runtime.autocompleteStorageDelegate = dev.vis.ark.data.Vault.storage
+        Media.init(ctx)
+        applyWebPrefs()
         // Extensions (uBlock Origin compiling its filter lists on first run) must never be killed by the
         // slow-script watchdog; on slower phones that would leave the ad blocker half-started.
         for (pref in listOf("dom.max_ext_content_script_run_time", "dom.max_chrome_script_run_time")) runCatching {
@@ -240,9 +245,61 @@ object Engine {
         }
     }
 
+    /**
+     * Web platform features that sit behind Gecko preferences. Ark answers every prompt these need
+     * (passkeys, "Sign in with" accounts, saved passwords, cards and addresses), so they're turned on.
+     */
+    fun applyWebPrefs() {
+        val user = org.mozilla.geckoview.GeckoPreferenceController.PREF_BRANCH_USER
+        fun set(name: String, v: Any) {
+            runCatching {
+                when (v) {
+                    is Boolean -> org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref(name, v, user)
+                    is Int -> org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref(name, v, user)
+                    is String -> org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref(name, v, user)
+                    else -> Unit
+                }
+            }.onFailure { Log.w(TAG, "pref $name", it) }
+        }
+        // Passwords: remember sign-ins, suggest strong passwords on sign-up forms.
+        set("signon.rememberSignons", true)
+        set("signon.autofillForms", Prefs.fillLogins)
+        set("signon.generation.enabled", Prefs.suggestPasswords)
+        set("signon.generation.available", Prefs.suggestPasswords)
+        set("signon.firefoxRelay.feature", "disabled")
+        // Addresses and payment cards.
+        set("extensions.formautofill.addresses.enabled", Prefs.autofillAddresses)
+        set("extensions.formautofill.addresses.capture.enabled", Prefs.autofillAddresses)
+        set("extensions.formautofill.addresses.supported", "on")
+        set("extensions.formautofill.creditCards.enabled", Prefs.autofillCards)
+        set("extensions.formautofill.creditCards.supported", "on")
+        // Passkeys and security keys go through Android's Credential Manager (see the manifest permissions).
+        set("security.webauthn.enable_android_fido2", true)
+        set("security.webauthn.enable_android_fido2.residentkey", true)
+        set("security.webauthn.enable_json_serialization_methods", true)
+        // "Sign in with Google / Apple / …" through the browser (FedCM), now that Ark shows its account picker.
+        set("dom.security.credentialmanagement.identity.enabled", true)
+        // Web Share, clipboard read after a tap (with Firefox's paste confirmation), persistent storage,
+        // and the Media Session API that drives Ark's lock-screen media controls.
+        set("dom.webshare.enabled", true)
+        set("dom.events.asyncClipboard.readText", true)
+        set("dom.events.asyncClipboard.clipboardItem", true)
+        set("dom.storageManager.enabled", true)
+        set("dom.media.mediasession.enabled", true)
+        // Experimental: the newest graphics and layout features Firefox hasn't shipped on Android yet.
+        val x = Prefs.experimentalWeb
+        set("dom.webgpu.enabled", x)
+        set("gfx.webgpu.ignore-blocklist", x)
+        set("dom.webgpu.service-workers.enabled", x)
+        set("layout.css.grid-template-masonry-value.enabled", x)
+        set("dom.viewTransitions.cross-document.enabled", x)
+        set("dom.webmidi.enabled", x)
+    }
+
     /** Push changed preferences into the live runtime. */
     fun applySettings() {
         if (!isReady) return
+        applyWebPrefs()
         val s = runtime.settings
         s.setJavaScriptEnabled(Prefs.javascript)
         s.setPreferredColorScheme(colorScheme())

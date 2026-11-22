@@ -16,6 +16,7 @@ import dev.vis.ark.data.Prefs
 import org.json.JSONArray
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -40,6 +41,10 @@ interface Host {
     fun lockOrientation(orientation: Int?)
     fun share(text: String?, url: String?)
     fun snack(message: String, action: String? = null, onAction: (() -> Unit)? = null)
+    /** Hands a PDF of the page to Android's print dialog; [done] says whether it was printed. */
+    fun printPdf(pdf: java.io.InputStream, title: String, done: (Boolean) -> Unit)
+    /** Fingerprint, face or screen lock; true straight away when the phone has no screen lock. */
+    fun verifyUser(title: String, cb: (Boolean) -> Unit)
 }
 
 /** Requests from web content that the UI must answer. */
@@ -65,6 +70,20 @@ sealed class Req {
     class Confirm(val title: String, val message: String, val confirm: String, val action: () -> Unit) : Req()
     /** Fire mode: "Fireproof these sites so they stay signed in?" */
     class Fireproof(val sites: List<String>) : Req()
+
+    // Passwords, payment cards and addresses
+    class LoginSave(val host: String, val p: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSaveOption>, val r: GeckoResult<PromptResponse>, val update: Boolean) : Req()
+    class LoginSelect(val host: String, val p: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSelectOption>, val r: GeckoResult<PromptResponse>) : Req()
+    class CardSave(val p: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSaveOption>, val r: GeckoResult<PromptResponse>) : Req()
+    class CardSelect(val p: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSelectOption>, val r: GeckoResult<PromptResponse>) : Req()
+    class AddressSave(val p: PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>, val r: GeckoResult<PromptResponse>) : Req()
+    class AddressSelect(val p: PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>, val r: GeckoResult<PromptResponse>) : Req()
+
+    // Passkeys shared across a company's sites, and "Sign in with..." (FedCM)
+    class RelatedOrigin(val p: PromptDelegate.WebAuthnRelatedOriginPrompt, val r: GeckoResult<PromptResponse>) : Req()
+    class IdpProvider(val p: PromptDelegate.IdentityCredential.ProviderSelectorPrompt, val r: GeckoResult<PromptResponse>) : Req()
+    class IdpAccount(val p: PromptDelegate.IdentityCredential.AccountSelectorPrompt, val r: GeckoResult<PromptResponse>) : Req()
+    class IdpPolicy(val p: PromptDelegate.IdentityCredential.PrivacyPolicyPrompt, val r: GeckoResult<PromptResponse>) : Req()
 }
 
 object Browser {
@@ -172,6 +191,7 @@ object Browser {
         val wasCurrent = t.id == currentId
         tabs.removeAt(idx)
         val url = t.url; val title = t.title; val priv = t.private
+        Media.tabClosed(t)
         t.session?.close(); t.session = null
         if (wasCurrent) {
             val parent = tabs.firstOrNull { it.id == t.parentId && it.private == priv }
@@ -443,6 +463,21 @@ object Browser {
 
         s.permissionDelegate = permissionDelegate(t)
         s.promptDelegate = promptDelegate(t)
+        s.mediaSessionDelegate = Media.delegate(t)
+        s.printDelegate = object : GeckoSession.PrintDelegate {
+            // Menu > Print: the whole page.
+            override fun onPrint(session: GeckoSession) {
+                session.saveAsPdf().accept({ pdf -> if (pdf != null) main.post { host?.printPdf(pdf, t.title.ifBlank { hostOf(t.url) }) { } } },
+                    { main.post { host?.snack("Couldn't print this page") } })
+            }
+
+            // window.print() from the page.
+            override fun onPrintWithStatus(pdf: java.io.InputStream): GeckoResult<Boolean> {
+                val r = GeckoResult<Boolean>()
+                main.post { host?.printPdf(pdf, t.title.ifBlank { hostOf(t.url) }) { r.complete(it) } ?: r.complete(false) }
+                return r
+            }
+        }
 
         s.setTranslationsSessionDelegate(object : TranslationsController.SessionTranslation.Delegate {
             override fun onOfferTranslate(session: GeckoSession) { t.offerTranslate = true }
@@ -536,14 +571,72 @@ object Browser {
         override fun onBeforeUnloadPrompt(session: GeckoSession, prompt: PromptDelegate.BeforeUnloadPrompt) = ask<Unit> { Req.BeforeUnload(prompt, it) }
         override fun onRepostConfirmPrompt(session: GeckoSession, prompt: PromptDelegate.RepostConfirmPrompt) = ask<Unit> { Req.Repost(prompt, it) }
 
-        // Ark doesn't keep passwords, but a submitted login form is how fire mode knows you just signed in.
+        // A sign-in form was submitted: offer to save (or update) the password. This is also how fire mode
+        // knows you just signed in.
         override fun onLoginSave(
-            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<org.mozilla.geckoview.Autocomplete.LoginSaveOption>,
-        ): GeckoResult<PromptResponse>? {
-            val origin = runCatching { request.options.firstOrNull()?.value?.origin }.getOrNull()
-            main.post { Fire.loginSeen(t, hostOf(origin ?: t.url)) }
-            return GeckoResult.fromValue(request.dismiss())
+            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSaveOption>,
+        ): GeckoResult<PromptResponse> {
+            val login = request.options.firstOrNull()?.value
+            val site = hostOf(login?.origin ?: t.url)
+            main.post { Fire.loginSeen(t, site) }
+            if (login == null || login.password.isNullOrEmpty() || !Prefs.savePasswords || site in Prefs.neverSave) {
+                return GeckoResult.fromValue(request.dismiss())
+            }
+            val existing = dev.vis.ark.data.Vault.findLogin(login.origin ?: "https://$site", login.username.orEmpty())
+            if (existing != null && existing.password == login.password) return GeckoResult.fromValue(request.dismiss())
+            val r = GeckoResult<PromptResponse>()
+            push(Req.LoginSave(site, request, r, update = existing != null))
+            return r
         }
+
+        override fun onLoginSelect(
+            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSelectOption>,
+        ): GeckoResult<PromptResponse> {
+            if (request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
+            val r = GeckoResult<PromptResponse>()
+            push(Req.LoginSelect(hostOf(t.url), request, r))
+            return r
+        }
+
+        override fun onCreditCardSave(
+            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSaveOption>,
+        ): GeckoResult<PromptResponse> {
+            if (!Prefs.autofillCards || t.private || request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
+            return ask<Unit> { Req.CardSave(request, it) }
+        }
+
+        override fun onCreditCardSelect(
+            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSelectOption>,
+        ): GeckoResult<PromptResponse> {
+            if (request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
+            return ask<Unit> { Req.CardSelect(request, it) }
+        }
+
+        override fun onAddressSave(
+            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>,
+        ): GeckoResult<PromptResponse> {
+            if (!Prefs.autofillAddresses || t.private || request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
+            return ask<Unit> { Req.AddressSave(request, it) }
+        }
+
+        override fun onAddressSelect(
+            session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>,
+        ): GeckoResult<PromptResponse> {
+            if (request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
+            return ask<Unit> { Req.AddressSelect(request, it) }
+        }
+
+        override fun onWebAuthnRelatedOriginPrompt(session: GeckoSession, prompt: PromptDelegate.WebAuthnRelatedOriginPrompt) =
+            ask<Unit> { Req.RelatedOrigin(prompt, it) }
+
+        override fun onSelectIdentityCredentialProvider(session: GeckoSession, prompt: PromptDelegate.IdentityCredential.ProviderSelectorPrompt) =
+            ask<Unit> { Req.IdpProvider(prompt, it) }
+
+        override fun onSelectIdentityCredentialAccount(session: GeckoSession, prompt: PromptDelegate.IdentityCredential.AccountSelectorPrompt) =
+            ask<Unit> { Req.IdpAccount(prompt, it) }
+
+        override fun onShowPrivacyPolicyIdentityCredential(session: GeckoSession, prompt: PromptDelegate.IdentityCredential.PrivacyPolicyPrompt) =
+            ask<Unit> { Req.IdpPolicy(prompt, it) }
 
         override fun onSharePrompt(session: GeckoSession, prompt: PromptDelegate.SharePrompt): GeckoResult<PromptResponse> {
             main.post { host?.share(prompt.text ?: prompt.title, prompt.uri) }

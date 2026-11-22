@@ -81,6 +81,32 @@ class MainActivity : ComponentActivity(), Host {
         cb?.invoke(uris)
     }
 
+    // GeckoView launching system UI for a page: passkey and security-key sheets (Google's FIDO service
+    // on Android 13 and older, or when the Credential Manager hands over to it), and similar.
+    private var pendingGecko: org.mozilla.geckoview.GeckoResult<Intent>? = null
+    private val geckoLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        ownSheetOpen = false
+        val r = pendingGecko; pendingGecko = null
+        if (res.resultCode == RESULT_OK) r?.complete(res.data ?: Intent()) else r?.completeExceptionally(Exception("Cancelled"))
+    }
+
+    // Passwords export: Android's "save as" picker.
+    private var exportText: String? = null
+    private val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        ownSheetOpen = false
+        val text = exportText; exportText = null
+        if (uri == null || text == null) return@registerForActivityResult
+        runCatching { contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } }
+            .onSuccess { snack("Passwords exported. Keep that file somewhere safe: anyone who opens it can read them.") }
+            .onFailure { snack("Couldn't save the file") }
+    }
+
+    fun exportPasswords(csv: String) {
+        exportText = csv
+        ownSheetOpen = true
+        runCatching { exportLauncher.launch("Ark passwords.csv") }.onFailure { ownSheetOpen = false; exportText = null }
+    }
+
     private var voiceCb: ((String) -> Unit)? = null
     private val voiceLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         ownSheetOpen = false
@@ -97,6 +123,17 @@ class MainActivity : ComponentActivity(), Host {
         Engine.init(this)
         Notifier.ensureChannels(this)
         Engine.runtime.webNotificationDelegate = Notifier
+        Engine.runtime.activityDelegate = org.mozilla.geckoview.GeckoRuntime.ActivityDelegate { pi ->
+            val r = org.mozilla.geckoview.GeckoResult<Intent>()
+            runOnUiThread {
+                pendingGecko?.completeExceptionally(Exception("Replaced"))
+                pendingGecko = r
+                ownSheetOpen = true
+                runCatching { geckoLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(pi).build()) }
+                    .onFailure { ownSheetOpen = false; pendingGecko = null; r.completeExceptionally(it) }
+            }
+            r
+        }
         Engine.runtime.orientationController.delegate = object : org.mozilla.geckoview.OrientationController.OrientationDelegate {
             override fun onOrientationLock(aOrientation: Int): org.mozilla.geckoview.GeckoResult<org.mozilla.geckoview.AllowOrDeny> {
                 lockOrientation(aOrientation); return org.mozilla.geckoview.GeckoResult.allow()
@@ -341,6 +378,50 @@ class MainActivity : ComponentActivity(), Host {
 
     override fun snack(message: String, action: String?, onAction: (() -> Unit)?) {
         runOnUiThread { snack = Snack(message, action, onAction) }
+    }
+
+    override fun verifyUser(title: String, cb: (Boolean) -> Unit) {
+        if (!canAuthenticate()) { cb(true); return }
+        ownSheetOpen = true
+        authenticate(title) { ok -> ownSheetOpen = false; cb(ok) }
+    }
+
+    /** Android's print dialog (printers, or "Save as PDF") for a PDF that GeckoView rendered. */
+    override fun printPdf(pdf: java.io.InputStream, title: String, done: (Boolean) -> Unit) {
+        val pm = getSystemService(android.print.PrintManager::class.java)
+        if (pm == null) { runCatching { pdf.close() }; done(false); snack("Printing isn't available"); return }
+        val file = File(cacheDir, "print.pdf")
+        Thread {
+            val ok = runCatching { pdf.use { i -> file.outputStream().use { i.copyTo(it) } } }.isSuccess
+            runOnUiThread {
+                if (!ok) { done(false); snack("Couldn't print this page"); return@runOnUiThread }
+                var finished = false
+                val adapter = object : android.print.PrintDocumentAdapter() {
+                    override fun onLayout(
+                        old: android.print.PrintAttributes?, new: android.print.PrintAttributes?, signal: android.os.CancellationSignal?,
+                        cb: LayoutResultCallback, extras: Bundle?,
+                    ) {
+                        if (signal?.isCanceled == true) { cb.onLayoutCancelled(); return }
+                        val info = android.print.PrintDocumentInfo.Builder(title.take(60).ifBlank { "Page" } + ".pdf")
+                            .setContentType(android.print.PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).build()
+                        cb.onLayoutFinished(info, old != new)
+                    }
+
+                    override fun onWrite(
+                        pages: Array<out android.print.PageRange>?, dest: android.os.ParcelFileDescriptor, signal: android.os.CancellationSignal?, cb: WriteResultCallback,
+                    ) {
+                        runCatching {
+                            file.inputStream().use { i -> java.io.FileOutputStream(dest.fileDescriptor).use { i.copyTo(it) } }
+                            cb.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
+                            finished = true
+                        }.onFailure { cb.onWriteFailed(it.message) }
+                    }
+
+                    override fun onFinish() { done(finished) }
+                }
+                runCatching { pm.print(title.ifBlank { "Ark" }, adapter, null) }.onFailure { done(false); snack("Printing isn't available") }
+            }
+        }.start()
     }
 
     fun voice(cb: (String) -> Unit) {

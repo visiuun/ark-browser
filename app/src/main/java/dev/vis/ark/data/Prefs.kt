@@ -23,6 +23,7 @@ object Prefs {
         loadZoom()
         fireproof.addAll(loadSet("fireproof"))
         fireNever.addAll(loadSet("fireNever"))
+        neverSave.addAll(loadSet("neverSave"))
     }
 
     private class Pref<T>(val key: String, val def: T) : ReadWriteProperty<Any?, T> {
@@ -86,6 +87,17 @@ object Prefs {
     var forget by Pref("forget", false)            // fire mode: erase everything (but fireproofed sites) whenever Ark closes
     var fireAsk by Pref("fireAsk", true)           // offer to fireproof a site after signing in to it
     var appLock by Pref("appLock", false)          // fingerprint / face / screen lock to open Ark
+
+    // Passwords & autofill
+    var savePasswords by Pref("savePasswords", true)   // offer to save passwords after signing in
+    var fillLogins by Pref("fillLogins", true)         // offer saved passwords on sign-in forms
+    var suggestPasswords by Pref("suggestPasswords", true) // suggest strong passwords on sign-up forms
+    var autofillAddresses by Pref("autofillAddresses", true)
+    var autofillCards by Pref("autofillCards", true)
+    var systemAutofill by Pref("systemAutofill", true) // let Android autofill services (Bitwarden, Google, 1Password…) fill pages
+
+    // Web platform
+    var experimentalWeb by Pref("experimentalWeb", false) // WebGPU and other features Firefox hasn't shipped on Android yet
 
     // Sites
     var javascript by Pref("javascript", true)
@@ -168,6 +180,13 @@ object Prefs {
     }
 
     fun neverFireproof(domain: String) { if (domain !in fireNever) { fireNever.add(domain); saveSet("fireNever", fireNever) } }
+
+    // Sites the user never wants to save a password for.
+    val neverSave = mutableStateListOf<String>()
+    fun setNeverSave(domain: String, on: Boolean) {
+        if (on) { if (domain !in neverSave) neverSave.add(domain) } else neverSave.remove(domain)
+        saveSet("neverSave", neverSave)
+    }
 
     private val touched by lazy { loadSet("fireTouched").toMutableSet() }
     fun touch(domain: String) { if (domain.isNotBlank() && touched.add(domain)) saveSet("fireTouched", touched) }

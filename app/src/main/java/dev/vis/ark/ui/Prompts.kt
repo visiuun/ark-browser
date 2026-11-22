@@ -69,6 +69,7 @@ import java.time.temporal.IsoFields
 fun PromptHost() {
     val req = Browser.prompts.firstOrNull() ?: return
     val done = { Browser.pop(req) }
+    if (CredentialPrompt(req, done)) return
     when (req) {
         is Req.Alert -> AlertDialog(
             onDismissRequest = { req.r.complete(req.p.dismiss()); done() },
@@ -209,6 +210,7 @@ fun PromptHost() {
         }
 
         is Req.Context -> Unit // shown as a sheet by ArkRoot
+        else -> Unit
     }
 }
 

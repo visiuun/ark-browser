@@ -13,6 +13,10 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -218,10 +222,28 @@ fun ArkRoot(activity: MainActivity) {
                 val epoch = Browser.viewEpoch
                 val coverUp = switcher || screen != Screen.None
                 val coverColor = cs.surface.toArgb()
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val pullTrigger = with(density) { 72.dp.toPx() }
+                var pull by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+                var refreshing by remember { mutableStateOf(false) }
                 AndroidView(
-                    factory = { ctx -> GeckoView(ctx).also { it.coverUntilFirstPaint(coverColor); gecko = it } },
+                    factory = { ctx ->
+                        PullGeckoView(ctx).also {
+                            it.coverUntilFirstPaint(coverColor)
+                            it.onPull = { d -> pull = d }
+                            it.onRelease = { d ->
+                                pull = 0f
+                                val t = Browser.current
+                                if (d >= pullTrigger && t?.session != null) { refreshing = true; t.session?.reload() }
+                            }
+                            // Android autofill: password managers (Google, Bitwarden, 1Password…) can fill pages.
+                            it.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+                            gecko = it
+                        }
+                    },
                     update = { v ->
                         @Suppress("UNUSED_EXPRESSION") epoch
+                        if (v.autofillEnabled != Prefs.systemAutofill) v.autofillEnabled = Prefs.systemAutofill
                         val s = Browser.current?.session
                         if (s != null && s.isOpen && !coverUp) {
                             if (v.session !== s) { if (v.session != null) v.releaseSession(); v.setSession(s) }
@@ -240,6 +262,27 @@ fun ArkRoot(activity: MainActivity) {
                         layout(c.maxWidth, c.maxHeight) { p.place(0, 0) }
                     },
                 )
+                // Pull-to-refresh indicator: follows the finger, spins while the page reloads.
+                val loading = tab?.loading == true
+                LaunchedEffect(refreshing, loading) {
+                    if (refreshing) { kotlinx.coroutines.delay(450); if (!loading) refreshing = false }
+                }
+                LaunchedEffect(loading) { if (!loading) { kotlinx.coroutines.delay(250); refreshing = false } }
+                val shownPull = animateFloatAsState(if (refreshing) pullTrigger else pull, tween(if (pull > 0f) 0 else 220), label = "pull")
+                if (tab != null && (shownPull.value > 1f || refreshing)) {
+                    val progress = (shownPull.value / pullTrigger).coerceIn(0f, 1f)
+                    Box(
+                        Modifier.align(Alignment.TopCenter).graphicsLayer {
+                            translationY = (kotlin.math.min(shownPull.value, pullTrigger * 1.6f) * 0.8f) - 24.dp.toPx()
+                            alpha = if (refreshing) 1f else progress
+                            scaleX = 0.6f + 0.4f * progress; scaleY = scaleX
+                        }.size(44.dp).clip(CircleShape).background(cs.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (refreshing) androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), color = cs.onPrimaryContainer, strokeWidth = 3.dp)
+                        else MIcon(Sym.Refresh, "Refresh", Modifier.graphicsLayer { rotationZ = progress * 270f }, tint = if (progress >= 1f) cs.primary else cs.onPrimaryContainer)
+                    }
+                }
                 if (tab == null) {
                     if (Prefs.homeMode == 1) BlankHome(onSearch = { sheet = Sheet.Search() })
                     else HomeScreen(activity, onSearch = { sheet = Sheet.Search() })
@@ -319,6 +362,7 @@ fun ArkRoot(activity: MainActivity) {
                 Screen.History -> HistoryScreen(onBack = { screen = Screen.None })
                 Screen.Downloads -> DownloadsScreen(activity, onBack = { screen = Screen.None })
                 Screen.Extensions -> ExtensionsScreen(onBack = { screen = Screen.None })
+                Screen.Passwords -> PasswordsScreen(activity, onBack = { screen = Screen.Settings })
             }
         }
 
