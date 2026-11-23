@@ -34,17 +34,29 @@ class QuietAutofill(val inner: Autofill.Delegate, private val tab: Tab) : Autofi
     private fun firstTime(node: Autofill.Node): Boolean {
         val url = tab.url.substringBefore('#')
         if (url != page) { page = url; offered.clear() }
-        return offered.add(key(node))
+        val first = offered.add(key(node))
+        if (first) log("offered", node)
+        return first
     }
 
+    // Both of these end in AutofillManager.notifyViewEntered: GeckoView's onNodeAdd re-enters the focused field,
+    // and Gecko registers a sign-in field again on each tap, so both have to be held back.
     override fun onNodeFocus(session: GeckoSession, node: Autofill.Node, data: Autofill.NodeData) {
-        if (firstTime(node)) inner.onNodeFocus(session, node, data)
+        if (firstTime(node)) inner.onNodeFocus(session, node, data) else log("held back focus", node)
+    }
+
+    override fun onNodeAdd(session: GeckoSession, node: Autofill.Node, data: Autofill.NodeData) {
+        val focused = runCatching { session.autofillSession.focused }.getOrNull()
+        if (focused == null || firstTime(focused)) inner.onNodeAdd(session, node, data) else log("held back add", focused)
+    }
+
+    private fun log(what: String, node: Autofill.Node) {
+        if (dev.vis.ark.BuildConfig.DEBUG) android.util.Log.d("ArkAutofill", "$what ${key(node)}")
     }
 
     override fun onSessionStart(session: GeckoSession) = inner.onSessionStart(session)
     override fun onSessionCommit(session: GeckoSession, node: Autofill.Node, data: Autofill.NodeData) = inner.onSessionCommit(session, node, data)
     override fun onSessionCancel(session: GeckoSession) = inner.onSessionCancel(session)
-    override fun onNodeAdd(session: GeckoSession, node: Autofill.Node, data: Autofill.NodeData) = inner.onNodeAdd(session, node, data)
     override fun onNodeRemove(session: GeckoSession, node: Autofill.Node, data: Autofill.NodeData) = inner.onNodeRemove(session, node, data)
     override fun onNodeUpdate(session: GeckoSession, node: Autofill.Node, data: Autofill.NodeData) = inner.onNodeUpdate(session, node, data)
     override fun onNodeBlur(session: GeckoSession, node: Autofill.Node, data: Autofill.NodeData) = inner.onNodeBlur(session, node, data)

@@ -98,7 +98,7 @@ object Prefs {
     var systemAutofill by Pref("systemAutofill", true) // let Android autofill services (Bitwarden, Google, 1Password…) fill pages
 
     // Web platform
-    var experimentalWeb by Pref("experimentalWeb", false) // WebGPU and other features Firefox hasn't shipped on Android yet
+    var experimentalWeb by Pref("experimentalWeb", true)  // WebGPU and other features Firefox hasn't shipped on Android yet
 
     // Sites
     var javascript by Pref("javascript", true)
