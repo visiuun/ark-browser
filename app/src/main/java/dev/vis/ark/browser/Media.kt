@@ -9,6 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.PlaybackState
 import android.os.Build
@@ -41,6 +44,37 @@ object Media {
     private var position = PlaybackState.PLAYBACK_POSITION_UNKNOWN
     private var duration = -1L
     private var rate = 1f
+    /** The foreground service is up (started once per playback, then only its notification is updated). */
+    private var serviceUp = false
+
+    // Audio focus, as every other browser and media app does: pause for calls and other players, duck for
+    // navigation prompts, and resume after a short interruption that paused us.
+    private var focus: AudioFocusRequest? = null
+    private var pausedForFocus = false
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS -> { pausedForFocus = false; if (playing) gecko?.pause(); abandonFocus() }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> if (playing) { pausedForFocus = true; gecko?.pause() }
+            AudioManager.AUDIOFOCUS_GAIN -> if (pausedForFocus) { pausedForFocus = false; gecko?.play() }
+        }
+    }
+
+    private fun requestFocus() {
+        if (focus != null) return
+        val am = ctx.getSystemService(AudioManager::class.java) ?: return
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MOVIE).build())
+            .setWillPauseWhenDucked(false)
+            .setOnAudioFocusChangeListener(focusListener)
+            .build()
+        if (runCatching { am.requestAudioFocus(req) }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED) != AudioManager.AUDIOFOCUS_REQUEST_FAILED) focus = req
+    }
+
+    private fun abandonFocus() {
+        val f = focus ?: return
+        focus = null
+        runCatching { ctx.getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(f) }
+    }
 
     fun init(c: Context) {
         if (::ctx.isInitialized) return
@@ -91,13 +125,19 @@ object Media {
         override fun onFeatures(s: GeckoSession, m: GeckoMedia, f: Long) { features = f; update() }
 
         override fun onPlay(s: GeckoSession, m: GeckoMedia) {
-            tab = t; gecko = m; playing = true
+            tab = t; gecko = m; playing = true; pausedForFocus = false
+            requestFocus()
             if (title.isBlank()) title = t.title
             if (artist.isBlank()) artist = hostOf(t.url)
             update()
         }
 
-        override fun onPause(s: GeckoSession, m: GeckoMedia) { if (gecko === m) { playing = false; update() } }
+        override fun onPause(s: GeckoSession, m: GeckoMedia) {
+            if (gecko !== m) return
+            playing = false
+            if (!pausedForFocus) abandonFocus()
+            update()
+        }
         override fun onStop(s: GeckoSession, m: GeckoMedia) { if (gecko === m) release() }
 
         override fun onPositionState(s: GeckoSession, m: GeckoMedia, st: GeckoMedia.PositionState) {
@@ -139,9 +179,16 @@ object Media {
         s.setMetadata(md.build())
         s.isActive = true
 
-        if (playing) {
+        // Start the service once when playback begins; after that (position ticks, pause, metadata) just update
+        // its notification. Starting a foreground service on every tick risked Android killing Ark when one
+        // start came while Ark was in the background.
+        if (playing && !serviceUp) {
             runCatching { ctx.startForegroundService(Intent(ctx, MediaService::class.java)) }
+                .onSuccess { serviceUp = true }
                 .onFailure { Log.w(TAG, "couldn't start media service", it); notifyOnly() }
+        } else if (!playing && serviceUp) {
+            // Paused: let the service leave the foreground (the notification stays, and can be swiped away).
+            runCatching { ctx.startService(Intent(ctx, MediaService::class.java)) }.onFailure { notifyOnly() }
         } else notifyOnly()
     }
 
@@ -189,7 +236,11 @@ object Media {
 
     val isPlaying get() = playing && gecko != null
 
+    /** The service stopped being in the foreground (paused) or was stopped. */
+    fun serviceStopped() { serviceUp = false }
+
     private fun release() {
+        abandonFocus(); pausedForFocus = false; serviceUp = false
         playing = false; gecko = null; tab = null; features = 0; art = null; position = PlaybackState.PLAYBACK_POSITION_UNKNOWN; duration = -1
         session?.run { isActive = false; release() }
         session = null
@@ -214,6 +265,7 @@ class MediaService : Service() {
         intent?.action?.let { Media.handle(it) }
         if (!Media.isPlaying) {
             stopForeground(STOP_FOREGROUND_DETACH)
+            Media.serviceStopped()
             if (intent?.action == "stop") stopSelf()
         }
         return START_NOT_STICKY

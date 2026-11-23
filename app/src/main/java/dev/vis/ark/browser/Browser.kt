@@ -140,6 +140,20 @@ object Browser {
     }
 
     fun push(r: Req) { main.post { prompts.add(r) } }
+
+    /**
+     * Queues [req] for [p] and drops it again if the page withdraws the prompt (it navigated, the tab closed,
+     * the field lost focus). Otherwise a stale dialog would sit at the front of the queue, and every prompt
+     * behind it (including ones a video player waits on) would never be answered.
+     */
+    fun pushFor(p: PromptDelegate.BasePrompt, req: Req) {
+        runCatching {
+            p.setDelegate(object : PromptDelegate.PromptInstanceDelegate {
+                override fun onPromptDismiss(prompt: PromptDelegate.BasePrompt) { main.post { prompts.remove(req) } }
+            })
+        }
+        push(req)
+    }
     fun pop(r: Req) { prompts.remove(r) }
 
     // ---------------------------------------------------------------- tabs
@@ -539,6 +553,10 @@ object Browser {
                 PermissionDelegate.PERMISSION_PERSISTENT_STORAGE -> return allow
                 PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> return if (Prefs.autoplay == 2) deny else allow
                 PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE -> return if (Prefs.autoplay == 0) allow else deny
+                // Protected (DRM) video: allowed like in Chrome and desktop Firefox. Many players ask for it while
+                // loading, even for free videos, and sat spinning behind the permission dialog until it was answered
+                // (or forever, once "Block" had been tapped by mistake).
+                PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS -> return allow
             }
             val r = GeckoResult<Int>()
             push(Req.Permission(hostOf(perm.uri), perm, r))
@@ -554,22 +572,22 @@ object Browser {
     }
 
     private fun promptDelegate(t: Tab) = object : PromptDelegate {
-        private fun <P> ask(make: (GeckoResult<PromptResponse>) -> Req): GeckoResult<PromptResponse> {
+        private fun ask(p: PromptDelegate.BasePrompt, make: (GeckoResult<PromptResponse>) -> Req): GeckoResult<PromptResponse> {
             val r = GeckoResult<PromptResponse>()
-            push(make(r))
+            pushFor(p, make(r))
             return r
         }
 
-        override fun onAlertPrompt(session: GeckoSession, prompt: PromptDelegate.AlertPrompt) = ask<Unit> { Req.Alert(prompt, it) }
-        override fun onButtonPrompt(session: GeckoSession, prompt: PromptDelegate.ButtonPrompt) = ask<Unit> { Req.Button(prompt, it) }
-        override fun onTextPrompt(session: GeckoSession, prompt: PromptDelegate.TextPrompt) = ask<Unit> { Req.Text(prompt, it) }
-        override fun onAuthPrompt(session: GeckoSession, prompt: PromptDelegate.AuthPrompt) = ask<Unit> { Req.Auth(prompt, it) }
-        override fun onChoicePrompt(session: GeckoSession, prompt: PromptDelegate.ChoicePrompt) = ask<Unit> { Req.Choice(prompt, it) }
-        override fun onColorPrompt(session: GeckoSession, prompt: PromptDelegate.ColorPrompt) = ask<Unit> { Req.ColorPick(prompt, it) }
-        override fun onDateTimePrompt(session: GeckoSession, prompt: PromptDelegate.DateTimePrompt) = ask<Unit> { Req.DateTime(prompt, it) }
-        override fun onPopupPrompt(session: GeckoSession, prompt: PromptDelegate.PopupPrompt) = ask<Unit> { Req.Popup(prompt, it) }
-        override fun onBeforeUnloadPrompt(session: GeckoSession, prompt: PromptDelegate.BeforeUnloadPrompt) = ask<Unit> { Req.BeforeUnload(prompt, it) }
-        override fun onRepostConfirmPrompt(session: GeckoSession, prompt: PromptDelegate.RepostConfirmPrompt) = ask<Unit> { Req.Repost(prompt, it) }
+        override fun onAlertPrompt(session: GeckoSession, prompt: PromptDelegate.AlertPrompt) = ask(prompt) { Req.Alert(prompt, it) }
+        override fun onButtonPrompt(session: GeckoSession, prompt: PromptDelegate.ButtonPrompt) = ask(prompt) { Req.Button(prompt, it) }
+        override fun onTextPrompt(session: GeckoSession, prompt: PromptDelegate.TextPrompt) = ask(prompt) { Req.Text(prompt, it) }
+        override fun onAuthPrompt(session: GeckoSession, prompt: PromptDelegate.AuthPrompt) = ask(prompt) { Req.Auth(prompt, it) }
+        override fun onChoicePrompt(session: GeckoSession, prompt: PromptDelegate.ChoicePrompt) = ask(prompt) { Req.Choice(prompt, it) }
+        override fun onColorPrompt(session: GeckoSession, prompt: PromptDelegate.ColorPrompt) = ask(prompt) { Req.ColorPick(prompt, it) }
+        override fun onDateTimePrompt(session: GeckoSession, prompt: PromptDelegate.DateTimePrompt) = ask(prompt) { Req.DateTime(prompt, it) }
+        override fun onPopupPrompt(session: GeckoSession, prompt: PromptDelegate.PopupPrompt) = ask(prompt) { Req.Popup(prompt, it) }
+        override fun onBeforeUnloadPrompt(session: GeckoSession, prompt: PromptDelegate.BeforeUnloadPrompt) = ask(prompt) { Req.BeforeUnload(prompt, it) }
+        override fun onRepostConfirmPrompt(session: GeckoSession, prompt: PromptDelegate.RepostConfirmPrompt) = ask(prompt) { Req.Repost(prompt, it) }
 
         // A sign-in form was submitted: offer to save (or update) the password. This is also how fire mode
         // knows you just signed in.
@@ -579,13 +597,13 @@ object Browser {
             val login = request.options.firstOrNull()?.value
             val site = hostOf(login?.origin ?: t.url)
             main.post { Fire.loginSeen(t, site) }
-            if (login == null || login.password.isNullOrEmpty() || !Prefs.savePasswords || site in Prefs.neverSave) {
+            if (login == null || login.password.isNullOrEmpty() || !Prefs.arkPasswords || !Prefs.savePasswords || site in Prefs.neverSave) {
                 return GeckoResult.fromValue(request.dismiss())
             }
             val existing = dev.vis.ark.data.Vault.findLogin(login.origin ?: "https://$site", login.username.orEmpty())
             if (existing != null && existing.password == login.password) return GeckoResult.fromValue(request.dismiss())
             val r = GeckoResult<PromptResponse>()
-            push(Req.LoginSave(site, request, r, update = existing != null))
+            pushFor(request, Req.LoginSave(site, request, r, update = existing != null))
             return r
         }
 
@@ -594,7 +612,7 @@ object Browser {
         ): GeckoResult<PromptResponse> {
             if (request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
             val r = GeckoResult<PromptResponse>()
-            push(Req.LoginSelect(hostOf(t.url), request, r))
+            pushFor(request, Req.LoginSelect(hostOf(t.url), request, r))
             return r
         }
 
@@ -602,41 +620,41 @@ object Browser {
             session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSaveOption>,
         ): GeckoResult<PromptResponse> {
             if (!Prefs.autofillCards || t.private || request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
-            return ask<Unit> { Req.CardSave(request, it) }
+            return ask(request) { Req.CardSave(request, it) }
         }
 
         override fun onCreditCardSelect(
             session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSelectOption>,
         ): GeckoResult<PromptResponse> {
             if (request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
-            return ask<Unit> { Req.CardSelect(request, it) }
+            return ask(request) { Req.CardSelect(request, it) }
         }
 
         override fun onAddressSave(
             session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>,
         ): GeckoResult<PromptResponse> {
             if (!Prefs.autofillAddresses || t.private || request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
-            return ask<Unit> { Req.AddressSave(request, it) }
+            return ask(request) { Req.AddressSave(request, it) }
         }
 
         override fun onAddressSelect(
             session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>,
         ): GeckoResult<PromptResponse> {
             if (request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
-            return ask<Unit> { Req.AddressSelect(request, it) }
+            return ask(request) { Req.AddressSelect(request, it) }
         }
 
         override fun onWebAuthnRelatedOriginPrompt(session: GeckoSession, prompt: PromptDelegate.WebAuthnRelatedOriginPrompt) =
-            ask<Unit> { Req.RelatedOrigin(prompt, it) }
+            ask(prompt) { Req.RelatedOrigin(prompt, it) }
 
         override fun onSelectIdentityCredentialProvider(session: GeckoSession, prompt: PromptDelegate.IdentityCredential.ProviderSelectorPrompt) =
-            ask<Unit> { Req.IdpProvider(prompt, it) }
+            ask(prompt) { Req.IdpProvider(prompt, it) }
 
         override fun onSelectIdentityCredentialAccount(session: GeckoSession, prompt: PromptDelegate.IdentityCredential.AccountSelectorPrompt) =
-            ask<Unit> { Req.IdpAccount(prompt, it) }
+            ask(prompt) { Req.IdpAccount(prompt, it) }
 
         override fun onShowPrivacyPolicyIdentityCredential(session: GeckoSession, prompt: PromptDelegate.IdentityCredential.PrivacyPolicyPrompt) =
-            ask<Unit> { Req.IdpPolicy(prompt, it) }
+            ask(prompt) { Req.IdpPolicy(prompt, it) }
 
         override fun onSharePrompt(session: GeckoSession, prompt: PromptDelegate.SharePrompt): GeckoResult<PromptResponse> {
             main.post { host?.share(prompt.text ?: prompt.title, prompt.uri) }

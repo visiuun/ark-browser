@@ -2,6 +2,10 @@
 
 package dev.vis.ark.ui
 
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.os.Build
+import android.view.textclassifier.TextClassifier
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +66,7 @@ import dev.vis.ark.data.Prefs
 import dev.vis.ark.net.Net
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -79,12 +85,23 @@ fun SearchSheetContent(
     var local by remember { mutableStateOf(listOf<HistoryEntry>()) }
     var clip by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
     val q = value.text.trim()
+
+    suspend fun readClip(): String? = runCatching { clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString() }.getOrNull()
+        ?.trim()?.takeIf { it.length < 2000 && Search.isUrlLike(it) }
 
     LaunchedEffect(Unit) {
         delay(60); runCatching { focus.requestFocus() }
-        clip = runCatching { clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString() }.getOrNull()
-            ?.trim()?.takeIf { it.length < 2000 && Search.isUrlLike(it) }
+        // Android 12+ shows "Ark pasted from your clipboard" whenever the clipboard is read, so only look at
+        // the clip's description (Android's own "this is a link" classification) and read the text on tap.
+        clip = if (Build.VERSION.SDK_INT >= 31) {
+            val d = runCatching { activity.getSystemService(ClipboardManager::class.java)?.primaryClipDescription }.getOrNull()
+            val isLink = d != null && d.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) &&
+                d.classificationStatus == ClipDescription.CLASSIFICATION_COMPLETE &&
+                runCatching { d.getConfidenceScore(TextClassifier.TYPE_URL) }.getOrDefault(0f) >= 0.5f
+            if (isLink) "" else null
+        } else readClip()
     }
     LaunchedEffect(q) {
         if (q.isEmpty()) { remote = emptyList(); local = emptyList(); return@LaunchedEffect }
@@ -128,7 +145,11 @@ fun SearchSheetContent(
     if (q.isEmpty()) {
         if (clip != null) {
             Spacer(Modifier.height(12.dp))
-            SuggestionRow(Sym.ContentPaste, "Open copied link", clip!!, onClick = { go(clip!!) })
+            // On Android 12+ the link itself is only read (with the system's paste notice) once it's tapped.
+            SuggestionRow(Sym.ContentPaste, "Open copied link", clip?.takeIf { it.isNotEmpty() }, onClick = {
+                val known = clip.orEmpty()
+                if (known.isNotEmpty()) go(known) else scope.launch { readClip()?.let { go(it) } ?: run { clip = null } }
+            })
         }
         Text("Pinned", style = MaterialTheme.typography.titleMedium, color = cs.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp, top = 26.dp, bottom = 14.dp))
         if (Prefs.pins.isEmpty()) {

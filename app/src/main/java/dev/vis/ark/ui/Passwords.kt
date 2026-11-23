@@ -266,6 +266,7 @@ fun PasswordsScreen(activity: MainActivity, onBack: () -> Unit) {
     var addCard by remember { mutableStateOf(false) }
     var addAddress by remember { mutableStateOf<Vault.Address?>(null) }
     var neverDialog by remember { mutableStateOf(false) }
+    var passkeyHelp by remember { mutableStateOf(false) }
     val v = Vault.version.intValue
 
     LaunchedEffect(Unit) { if (!unlocked) activity.verifyUser("Show saved passwords") { unlocked = it } }
@@ -297,23 +298,36 @@ fun PasswordsScreen(activity: MainActivity, onBack: () -> Unit) {
             when (tab) {
                 VaultTab.Passwords -> {
                     item { SectionLabel("Ark password manager") }
-                    item { ToggleRow("Offer to save passwords", Prefs.savePasswords, 0, 4, "After you sign in to a site") { Prefs.savePasswords = it } }
-                    item { ToggleRow("Fill in saved passwords", Prefs.fillLogins, 1, 4, "Pick an account when you tap a sign-in field") { Prefs.fillLogins = it; dev.vis.ark.browser.Engine.applySettings() } }
-                    item { ToggleRow("Suggest strong passwords", Prefs.suggestPasswords, 2, 4, "On sign-up and change-password forms") { Prefs.suggestPasswords = it; dev.vis.ark.browser.Engine.applySettings() } }
+                    item {
+                        ToggleRow(
+                            "Use Ark's password manager", Prefs.arkPasswords, 0, 5,
+                            if (Prefs.arkPasswords) "Turn off to use another app (Bitwarden, 1Password, Proton Pass…) instead"
+                            else "Off: your autofill app fills sign-in forms. Passwords saved in Ark stay here",
+                        ) { on ->
+                            Prefs.arkPasswords = on
+                            // Another password manager reaches pages through Android autofill, so make sure that's on.
+                            if (!on && !Prefs.systemAutofill) { Prefs.systemAutofill = true; Browser.viewEpoch++ }
+                            dev.vis.ark.browser.Engine.applySettings()
+                        }
+                    }
+                    val ark = Prefs.arkPasswords
+                    item { ToggleRow("Offer to save passwords", Prefs.savePasswords, 1, 5, "After you sign in to a site", enabled = ark) { Prefs.savePasswords = it } }
+                    item { ToggleRow("Fill in saved passwords", Prefs.fillLogins, 2, 5, "Pick an account when you tap a sign-in field", enabled = ark) { Prefs.fillLogins = it; dev.vis.ark.browser.Engine.applySettings() } }
+                    item { ToggleRow("Suggest strong passwords", Prefs.suggestPasswords, 3, 5, "On sign-up and change-password forms", enabled = ark) { Prefs.suggestPasswords = it; dev.vis.ark.browser.Engine.applySettings() } }
                     item {
                         val n = Prefs.neverSave.size
-                        ClickRow("Never saved", if (n == 0) "No sites" else "$n ${if (n == 1) "site" else "sites"}", 3, 4) { neverDialog = true }
+                        ClickRow("Never saved", if (n == 0) "No sites" else "$n ${if (n == 1) "site" else "sites"}", 4, 5) { neverDialog = true }
                     }
 
                     item { SectionLabel("Passkeys & other password managers") }
                     item {
                         ToggleRow(
-                            "Android autofill in pages", Prefs.systemAutofill, 0, 4,
+                            "Android autofill in pages", Prefs.systemAutofill, 0, 5,
                             "Let your autofill service (Google, Bitwarden, 1Password, Proton Pass, Samsung Pass…) fill sign-in forms",
                         ) { Prefs.systemAutofill = it; Browser.viewEpoch++ }
                     }
                     item {
-                        ClickRow("Autofill service", "Choose which password manager fills apps and pages", 1, 4) {
+                        ClickRow("Autofill service", "Choose which password manager fills apps and pages", 1, 5) {
                             val i = Intent(android.provider.Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE).setData(android.net.Uri.parse("package:${activity.packageName}"))
                             runCatching { activity.startActivity(i) }.onFailure { runCatching { activity.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) } }
                         }
@@ -323,7 +337,7 @@ fun PasswordsScreen(activity: MainActivity, onBack: () -> Unit) {
                             "Passkeys",
                             if (Build.VERSION.SDK_INT >= 34) "Sites use the passkey providers you pick in Android: Google Password Manager, Bitwarden, 1Password…"
                             else "Passkeys come from Google Password Manager on this Android version",
-                            2, 4,
+                            2, 5,
                         ) {
                             val i = if (Build.VERSION.SDK_INT >= 34) Intent("android.settings.CREDENTIAL_PROVIDER").setData(android.net.Uri.parse("package:${activity.packageName}"))
                             else Intent(android.provider.Settings.ACTION_SETTINGS)
@@ -331,7 +345,10 @@ fun PasswordsScreen(activity: MainActivity, onBack: () -> Unit) {
                         }
                     }
                     item {
-                        ClickRow("Import or export", "CSV from Chrome, Firefox, Bitwarden, 1Password, Proton Pass…", 3, 4) {
+                        ClickRow("Passkey not working?", "\"Browser signature does not match\" in Bitwarden and similar errors", 3, 5) { passkeyHelp = true }
+                    }
+                    item {
+                        ClickRow("Import or export", "CSV from Chrome, Firefox, Bitwarden, 1Password, Proton Pass…", 4, 5) {
                             activity.pickFiles(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/csv", "application/vnd.ms-excel", "*/*"), false, false) { uris ->
                                 val u = uris?.firstOrNull() ?: return@pickFiles
                                 Thread {
@@ -424,6 +441,44 @@ fun PasswordsScreen(activity: MainActivity, onBack: () -> Unit) {
     if (addLogin) LoginDialog(null, onDismiss = { addLogin = false }, onOpenSite = {})
     if (addCard) CardDialog(onDismiss = { addCard = false })
     addAddress?.let { a -> AddressDialog(a, onDismiss = { addAddress = null }) }
+    if (passkeyHelp) {
+        val check = remember { signingCheck(activity) }
+        AlertDialog(
+            onDismissRequest = { passkeyHelp = false },
+            icon = { MIcon(Sym.Password, null) },
+            title = { Text("Passkeys in other apps") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    when {
+                        check == null -> Text("Couldn't read Ark's signature on this phone.")
+                        check.rotated -> {
+                            Text("This phone still remembers the signing key Ark used before version 1.6.0.")
+                            Text(
+                                "Bitwarden and other password apps check a browser against its oldest key, so they will refuse " +
+                                    "passkeys from Ark until Ark is installed fresh: export your passwords (Import or export), " +
+                                    "uninstall Ark, install the latest version from GitHub, then import them again.",
+                            )
+                        }
+                        else -> {
+                            Text("Ark's signature on this phone is fine.")
+                            Text(
+                                "If Bitwarden says the browser signature doesn't match, it remembers Ark from an older version. " +
+                                    "In Bitwarden, open Settings › Autofill › Passkey management › Privileged apps, remove Ark from " +
+                                    "\"Trusted by You\", then use the passkey again and trust Ark when Bitwarden asks.",
+                            )
+                        }
+                    }
+                    if (check != null) Text(
+                        "Ark's SHA-256 fingerprint:\n${check.current}",
+                        style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = cs.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = { TextButton({ passkeyHelp = false }) { Text("OK") } },
+            dismissButton = check?.let { c -> { TextButton({ copySecret(activity, "Fingerprint", c.current, sensitive = false) }) { Text("Copy fingerprint") } } },
+        )
+    }
+
     if (neverDialog) AlertDialog(
         onDismissRequest = { neverDialog = false },
         title = { Text("Never saved") },
@@ -561,3 +616,21 @@ private fun AddressDialog(a: Vault.Address, onDismiss: () -> Unit) {
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
     )
 }
+
+/**
+ * Ark's signing identity as password apps see it. androidx CallingAppInfo (used by Bitwarden and others to
+ * check browsers) compares the OLDEST key in the signing history, while the browser is trusted by its CURRENT
+ * key, so a phone that still keeps the 1.6.0 key rotation can never pass that check.
+ */
+private class SigningCheck(val current: String, val rotated: Boolean)
+
+private fun signingCheck(ctx: android.content.Context): SigningCheck? = runCatching {
+    if (Build.VERSION.SDK_INT < 28) return@runCatching null
+    val info = ctx.packageManager.getPackageInfo(ctx.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES).signingInfo
+        ?: return@runCatching null
+    fun fp(sig: android.content.pm.Signature) = java.security.MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
+        .joinToString(":") { "%02X".format(it) }
+    val current = fp(info.apkContentsSigners.first())
+    val oldest = if (info.hasMultipleSigners()) current else info.signingCertificateHistory?.firstOrNull()?.let { fp(it) } ?: current
+    SigningCheck(current, oldest != current)
+}.getOrNull()

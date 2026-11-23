@@ -89,6 +89,7 @@ object Prefs {
     var appLock by Pref("appLock", false)          // fingerprint / face / screen lock to open Ark
 
     // Passwords & autofill
+    var arkPasswords by Pref("arkPasswords", true)     // false: Ark's own password manager is off, another app (Bitwarden…) fills through Android autofill
     var savePasswords by Pref("savePasswords", true)   // offer to save passwords after signing in
     var fillLogins by Pref("fillLogins", true)         // offer saved passwords on sign-in forms
     var suggestPasswords by Pref("suggestPasswords", true) // suggest strong passwords on sign-up forms

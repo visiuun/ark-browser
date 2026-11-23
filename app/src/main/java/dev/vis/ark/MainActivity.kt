@@ -47,6 +47,12 @@ class MainActivity : ComponentActivity(), Host {
         var pendingUpdate by mutableStateOf(false)
         /** App lock: true while Ark is covered and waiting for a fingerprint, face or screen-lock check. */
         var locked by mutableStateOf(false)
+        /** Bumped each time another app hands Ark a link or text to open: Root clears any sheet covering the new tab. */
+        var openedFromIntent by mutableStateOf(0)
+        /** Ark was started to open a link (not from the launcher), so it shouldn't open into the empty search sheet. */
+        var launchedWithLink = false
+
+        private val LINK_ACTIONS = setOf(Intent.ACTION_VIEW, Intent.ACTION_WEB_SEARCH, Intent.ACTION_SEARCH, Intent.ACTION_SEND, Intent.ACTION_PROCESS_TEXT)
     }
 
     /** A system sheet we opened ourselves (file picker, camera, voice) is up: coming back from it doesn't re-lock. */
@@ -152,6 +158,9 @@ class MainActivity : ComponentActivity(), Host {
         applyRecentsPrivacy()
         // Fire mode: a fresh start (not a re-creation of a running Ark) erases everything that isn't fireproofed.
         if (Prefs.forget && savedInstanceState == null) Fire.burn()
+        // Opened with a link: don't flash the search sheet (which also offers the clipboard) while fire mode
+        // finishes clearing and the link's tab is created.
+        launchedWithLink = savedInstanceState == null && intent?.action in LINK_ACTIONS
         if (savedInstanceState == null) Fire.whenReady { handleIntent(intent) }
         setContent {
             ArkTheme {
@@ -237,6 +246,7 @@ class MainActivity : ComponentActivity(), Host {
 
     private fun handleIntent(i: Intent?) {
         i ?: return
+        if (i.action in LINK_ACTIONS) openedFromIntent++
         when (i.action) {
             Intent.ACTION_VIEW -> i.dataString?.let { Browser.newTab(it) }
             Intent.ACTION_WEB_SEARCH, Intent.ACTION_SEARCH -> i.getStringExtra("query")?.let { Browser.open(it, inNewTab = true) }

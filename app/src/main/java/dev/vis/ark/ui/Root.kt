@@ -117,7 +117,15 @@ fun ArkRoot(activity: MainActivity) {
         if (home != null) { sheet = null; Browser.newTab(home, private) } else sheet = Sheet.Search(private = private)
     }
     // Fresh install / no tabs: open straight into search like Arc (or load the homepage).
-    LaunchedEffect(Unit) { if (Browser.tabs.isEmpty() && sheet == null && homepageUrl() == null) sheet = Sheet.Search() }
+    // Not when another app started Ark to open a link: that link's tab is about to appear.
+    LaunchedEffect(Unit) {
+        if (Browser.tabs.isEmpty() && sheet == null && homepageUrl() == null && !MainActivity.launchedWithLink) sheet = Sheet.Search()
+        MainActivity.launchedWithLink = false
+    }
+    // A link from another app opened a tab: show it, not whatever sheet or screen was on top.
+    LaunchedEffect(MainActivity.openedFromIntent) {
+        if (MainActivity.openedFromIntent > 0) { sheet = null; switcher = false; screen = Screen.None; finding = false }
+    }
     // With a homepage set there's no empty home screen: show the page whenever no tab is open.
     LaunchedEffect(Browser.current == null, switcher, Prefs.homeMode, Prefs.homeUrl) {
         val home = homepageUrl()

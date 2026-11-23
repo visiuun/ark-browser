@@ -336,10 +336,10 @@ object Vault {
     /** GeckoView's view of the vault. Saving happens only after the user agrees in a save prompt. */
     val storage = object : Autocomplete.StorageDelegate {
         override fun onLoginFetch(domain: String): GeckoResult<Array<Autocomplete.LoginEntry>> =
-            GeckoResult.fromValue(if (Prefs.fillLogins) loginsFor(domain).map { it.toGecko() }.toTypedArray() else emptyArray())
+            GeckoResult.fromValue(if (Prefs.arkPasswords && Prefs.fillLogins) loginsFor(domain).map { it.toGecko() }.toTypedArray() else emptyArray())
 
         override fun onLoginFetch(): GeckoResult<Array<Autocomplete.LoginEntry>> =
-            GeckoResult.fromValue(if (Prefs.fillLogins) logins.map { it.toGecko() }.toTypedArray() else emptyArray())
+            GeckoResult.fromValue(if (Prefs.arkPasswords && Prefs.fillLogins) logins.map { it.toGecko() }.toTypedArray() else emptyArray())
 
         override fun onLoginSave(login: Autocomplete.LoginEntry) {
             val origin = login.origin ?: return

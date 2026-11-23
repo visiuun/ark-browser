@@ -261,11 +261,14 @@ object Engine {
                 }
             }.onFailure { Log.w(TAG, "pref $name", it) }
         }
-        // Passwords: remember sign-ins, suggest strong passwords on sign-up forms.
+        // Passwords: remember sign-ins, suggest strong passwords on sign-up forms. All off when another app
+        // (Bitwarden, 1Password, Proton Pass…) is the password manager, so the two never compete for a field.
+        val ark = Prefs.arkPasswords
+        // Sign-in detection stays on either way: fire mode uses it to offer fireproofing (saving is skipped in onLoginSave).
         set("signon.rememberSignons", true)
-        set("signon.autofillForms", Prefs.fillLogins)
-        set("signon.generation.enabled", Prefs.suggestPasswords)
-        set("signon.generation.available", Prefs.suggestPasswords)
+        set("signon.autofillForms", ark && Prefs.fillLogins)
+        set("signon.generation.enabled", ark && Prefs.suggestPasswords)
+        set("signon.generation.available", ark && Prefs.suggestPasswords)
         set("signon.firefoxRelay.feature", "disabled")
         // Addresses and payment cards.
         set("extensions.formautofill.addresses.enabled", Prefs.autofillAddresses)
@@ -277,6 +280,11 @@ object Engine {
         set("security.webauthn.enable_android_fido2", true)
         set("security.webauthn.enable_android_fido2.residentkey", true)
         set("security.webauthn.enable_json_serialization_methods", true)
+        // No passkey requests in the background ("conditional mediation"). Sites like Google ask for one as soon as
+        // the sign-in page loads, expecting a quiet suggestion in the username field; on Android that became
+        // Android's full-screen sign-in sheet popping up by itself on every login page. Sites now show their
+        // "Sign in with a passkey" button instead, which opens the same system sheet when you tap it.
+        set("security.webauthn.enable_conditional_mediation", false)
         // "Sign in with Google / Apple / …" through the browser (FedCM), now that Ark shows its account picker.
         set("dom.security.credentialmanagement.identity.enabled", true)
         // Web Share, clipboard read after a tap (with Firefox's paste confirmation), persistent storage,
@@ -286,6 +294,12 @@ object Engine {
         set("dom.events.asyncClipboard.clipboardItem", true)
         set("dom.storageManager.enabled", true)
         set("dom.media.mediasession.enabled", true)
+        // Video compatibility, matching Firefox for Android: protected (Widevine) playback through Android's
+        // MediaDrm, and Media Source streaming (YouTube, Twitch, Netflix-style adaptive players).
+        set("media.eme.enabled", true)
+        set("media.mediadrm-widevinecdm.visible", true)
+        set("media.mediasource.enabled", true)
+        set("media.mediasource.webm.enabled", true)
         // Experimental: the newest graphics and layout features Firefox hasn't shipped on Android yet.
         val x = Prefs.experimentalWeb
         set("dom.webgpu.enabled", x)
