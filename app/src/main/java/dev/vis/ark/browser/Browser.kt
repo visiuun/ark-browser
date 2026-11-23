@@ -73,7 +73,7 @@ sealed class Req {
 
     // Passwords, payment cards and addresses
     class LoginSave(val host: String, val p: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSaveOption>, val r: GeckoResult<PromptResponse>, val update: Boolean) : Req()
-    class LoginSelect(val host: String, val p: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSelectOption>, val r: GeckoResult<PromptResponse>) : Req()
+    class LoginSelect(val host: String, val p: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSelectOption>, val r: GeckoResult<PromptResponse>, val tabId: Long = -1) : Req()
     class CardSave(val p: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSaveOption>, val r: GeckoResult<PromptResponse>) : Req()
     class CardSelect(val p: PromptDelegate.AutocompleteRequest<Autocomplete.CreditCardSelectOption>, val r: GeckoResult<PromptResponse>) : Req()
     class AddressSave(val p: PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>, val r: GeckoResult<PromptResponse>) : Req()
@@ -95,6 +95,28 @@ object Browser {
     val tabs = mutableStateListOf<Tab>()
     var currentId by mutableStateOf<Long?>(null)
     val current: Tab? get() = tabs.firstOrNull { it.id == currentId }
+
+    /**
+     * Saved logins for the sign-in field that has focus, shown as a bar above the keyboard (not a dialog, so the
+     * field can still be typed in). Gecko asks again on every focus; the bar goes away when the field loses it.
+     */
+    var loginOffer by mutableStateOf<Req.LoginSelect?>(null)
+    /** Pages (tab id + address) where the user closed the saved-login bar: don't offer it there again. */
+    private val loginOfferClosed = mutableSetOf<String>()
+    private fun offerKey(t: Tab) = "${t.id}|${t.url.substringBefore('#')}"
+
+    fun pickLogin(o: Autocomplete.LoginSelectOption) {
+        val req = loginOffer ?: return
+        loginOffer = null
+        req.r.complete(req.p.confirm(o))
+    }
+
+    fun closeLoginOffer() {
+        val req = loginOffer ?: return
+        loginOffer = null
+        tabs.firstOrNull { it.id == req.tabId }?.let { loginOfferClosed += offerKey(it) }
+        req.r.complete(req.p.dismiss())
+    }
 
     /** Queue of pending web prompts; the UI shows the first one. */
     val prompts = mutableStateListOf<Req>()
@@ -610,9 +632,19 @@ object Browser {
         override fun onLoginSelect(
             session: GeckoSession, request: PromptDelegate.AutocompleteRequest<Autocomplete.LoginSelectOption>,
         ): GeckoResult<PromptResponse> {
-            if (request.options.isEmpty()) return GeckoResult.fromValue(request.dismiss())
+            if (request.options.isEmpty() || offerKey(t) in loginOfferClosed) return GeckoResult.fromValue(request.dismiss())
             val r = GeckoResult<PromptResponse>()
-            pushFor(request, Req.LoginSelect(hostOf(t.url), request, r))
+            val req = Req.LoginSelect(hostOf(t.url), request, r, t.id)
+            runCatching {
+                request.setDelegate(object : PromptDelegate.PromptInstanceDelegate {
+                    override fun onPromptDismiss(prompt: PromptDelegate.BasePrompt) { main.post { if (loginOffer === req) loginOffer = null } }
+                })
+            }
+            main.post {
+                // A newer request (another field, or the same one focused again) replaces the old offer.
+                loginOffer?.let { old -> if (old !== req) runCatching { old.r.complete(old.p.dismiss()) } }
+                loginOffer = req
+            }
             return r
         }
 

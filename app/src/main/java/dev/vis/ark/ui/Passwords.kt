@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -237,6 +239,39 @@ private fun <T> PickList(title: String, icon: String, items: List<T>, label: (T)
         confirmButton = {},
         dismissButton = { TextButton(onCancel) { Text("Cancel") } },
     )
+}
+
+/**
+ * Saved logins for the focused sign-in field, as a bar above the keyboard (like Chrome's keyboard accessory).
+ * Unlike a dialog it never takes the field's focus, so typing keeps working; × hides it for the rest of the page.
+ */
+@Composable
+fun LoginBar(req: Req.LoginSelect, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(28.dp), color = cs.surfaceContainerHigh, shadowElevation = 6.dp,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
+            MIcon(Sym.Password, null, tint = cs.primary)
+            Spacer(Modifier.width(10.dp))
+            LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(req.p.options.toList()) { o ->
+                    val generated = o.hint and Autocomplete.SelectOption.Hint.GENERATED != 0
+                    Surface(onClick = { Browser.pickLogin(o) }, shape = CircleShape, color = cs.secondaryContainer, contentColor = cs.onSecondaryContainer) {
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Text(
+                                if (generated) "Use a strong password" else o.value.username?.takeIf { it.isNotBlank() } ?: "(no username)",
+                                style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                            if (!generated) Text(Vault.hostOf(o.value.origin), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            IconButton(onClick = { Browser.closeLoginOffer() }) { MIcon(Sym.Close, "Don't suggest on this page", tint = cs.onSurfaceVariant) }
+        }
+    }
 }
 
 // ======================================================================= Settings › Passwords

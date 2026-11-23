@@ -301,6 +301,11 @@ fun ArkRoot(activity: MainActivity) {
                     else HomeScreen(activity, onSearch = { sheet = Sheet.Search() })
                 }
                 if (finding && tab != null) FindBar(tab, onClose = { finding = false }, modifier = Modifier.align(Alignment.BottomCenter))
+                // Saved logins for the focused sign-in field (Ark's password manager), above the keyboard.
+                val offer = Browser.loginOffer
+                if (offer != null && offer.tabId == tab?.id && !finding && !switcher && screen == Screen.None && sheet == null) {
+                    LoginBar(offer, Modifier.align(Alignment.BottomCenter))
+                }
             }
             if (barShown) {
                 BottomBar(
