@@ -251,13 +251,18 @@ fun ArkRoot(activity: MainActivity) {
                     },
                     update = { v ->
                         @Suppress("UNUSED_EXPRESSION") epoch
-                        if (v.autofillEnabled != Prefs.systemAutofill) v.autofillEnabled = Prefs.systemAutofill
+                        if (v.autofillEnabled != Prefs.systemAutofill) { dev.vis.ark.browser.QuietAutofill.unwrap(v.session); v.autofillEnabled = Prefs.systemAutofill }
                         val s = Browser.current?.session
                         if (s != null && s.isOpen && !coverUp) {
-                            if (v.session !== s) { if (v.session != null) v.releaseSession(); v.setSession(s) }
+                            if (v.session !== s) { if (v.session != null) { dev.vis.ark.browser.QuietAutofill.unwrap(v.session); v.releaseSession() }; v.setSession(s) }
+                            // GeckoView installs its Android-autofill bridge on setSession (and when autofill is
+                            // switched on): wrap it so the system sign-in sheet doesn't open on every tap.
+                            val af = s.autofillDelegate
+                            val t = Browser.current
+                            if (af != null && af !is dev.vis.ark.browser.QuietAutofill && t != null) s.autofillDelegate = dev.vis.ark.browser.QuietAutofill(af, t)
                             v.visibility = View.VISIBLE
                         } else {
-                            if (v.session != null && (s == null || !s.isOpen || v.session !== s)) v.releaseSession()
+                            if (v.session != null && (s == null || !s.isOpen || v.session !== s)) { dev.vis.ark.browser.QuietAutofill.unwrap(v.session); v.releaseSession() }
                             v.visibility = View.INVISIBLE
                         }
                     },
