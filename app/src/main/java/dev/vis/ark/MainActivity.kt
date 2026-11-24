@@ -122,12 +122,20 @@ class MainActivity : ComponentActivity(), Host {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Perf.mark("onCreate")
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         HistoryStore.init(this)
+        Perf.mark("prefs")
         Engine.init(this)
+        Perf.mark("engine")
         Notifier.ensureChannels(this)
+        // Disk cache for Ark's own requests (favicons, home screen images and feeds), following each server's
+        // caching headers, so icons don't download again on every start. Opened off the main thread.
+        if (android.net.http.HttpResponseCache.getInstalled() == null) Thread({
+            runCatching { android.net.http.HttpResponseCache.install(File(cacheDir, "http"), 24L shl 20) }
+        }, "ark-httpcache").start()
         Engine.runtime.webNotificationDelegate = Notifier
         Engine.runtime.activityDelegate = org.mozilla.geckoview.GeckoRuntime.ActivityDelegate { pi ->
             val r = org.mozilla.geckoview.GeckoResult<Intent>()
@@ -162,6 +170,8 @@ class MainActivity : ComponentActivity(), Host {
         // finishes clearing and the link's tab is created.
         launchedWithLink = savedInstanceState == null && intent?.action in LINK_ACTIONS
         if (savedInstanceState == null) Fire.whenReady { handleIntent(intent) }
+        Perf.mark("browser")
+        if (Perf.on) window.decorView.post { Perf.mark("firstFrame") }
         setContent {
             ArkTheme {
                 // Locked: nothing of the browser is composed at all, so no page, sheet or dialog can show through.
@@ -190,6 +200,7 @@ class MainActivity : ComponentActivity(), Host {
 
     override fun onStop() {
         super.onStop()
+        Browser.saveNow(sync = true)
         if (Prefs.appLock && !authInFlight && !ownSheetOpen && !isChangingConfigurations) locked = true
     }
 
@@ -265,7 +276,7 @@ class MainActivity : ComponentActivity(), Host {
 
     override fun onPause() {
         super.onPause()
-        Browser.saveNow()
+        Browser.saveNow(sync = false)
     }
 
     /** Whether Ark currently handles web links. Refreshed every time the app comes back to the foreground. */
@@ -296,6 +307,17 @@ class MainActivity : ComponentActivity(), Host {
             packageManager.resolveActivity(probe, android.content.pm.PackageManager.ResolveInfoFlags.of(android.content.pm.PackageManager.MATCH_DEFAULT_ONLY.toLong()))
         else @Suppress("DEPRECATION") packageManager.resolveActivity(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
         return info?.activityInfo?.packageName == packageName
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // The system is short of memory: unload background tabs (they restore when opened) before Android has to
+        // kill Ark's content processes or the app itself.
+        when {
+            level >= TRIM_MEMORY_BACKGROUND -> Browser.trimSessions(keep = 0)
+            level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL -> Browser.trimSessions(keep = 1)
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

@@ -27,6 +27,8 @@ object HistoryStore {
 
             override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {}
         }
+        // Write-ahead logging: recording a visit never blocks the address bar's history lookups (and vice versa).
+        helper.setWriteAheadLoggingEnabled(true)
     }
 
     private fun bump() { android.os.Handler(android.os.Looper.getMainLooper()).post { version.intValue++ } }

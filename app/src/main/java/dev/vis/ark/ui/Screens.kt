@@ -278,7 +278,13 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit, onOpen: (Screen) 
                 val n = dev.vis.ark.data.Vault.logins.size
                 ClickRow("Passwords, passkeys & autofill", if (n == 0) "Save passwords, cards and addresses · passkeys" else "$n saved ${if (n == 1) "password" else "passwords"} · passkeys · cards · addresses", 0, 4) { onOpen(Screen.Passwords) }
             }
-            item { ClickRow("History", "${runCatching { HistoryStore.count() }.getOrDefault(0)} pages", 1, 4) { onOpen(Screen.History) } }
+            item {
+                // Counted off the main thread: a long history made opening Settings stutter.
+                var pages by remember { mutableStateOf<Int?>(null) }
+                val hv = HistoryStore.version.intValue
+                LaunchedEffect(hv) { pages = withContext(Dispatchers.IO) { runCatching { HistoryStore.count() }.getOrDefault(0) } }
+                ClickRow("History", pages?.let { "$it pages" } ?: "Pages you've visited", 1, 4) { onOpen(Screen.History) }
+            }
             item { ClickRow("Downloads", "${Downloads.all().size} files", 2, 4) { onOpen(Screen.Downloads) } }
             item { ClickRow("Add-ons", "${Engine.extensions.size} installed · uBlock Origin, Dark Reader…", 3, 4) { onOpen(Screen.Extensions) } }
 

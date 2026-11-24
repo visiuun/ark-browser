@@ -25,6 +25,8 @@ class Tab(
     initialTitle: String = "",
 ) {
     var session: GeckoSession? = null
+    /** Latest session state from Gecko; turned into text only when the tab list is written to disk. */
+    @Volatile var liveState: GeckoSession.SessionState? = null
 
     var url by mutableStateOf(initialUrl)
     var title by mutableStateOf(initialTitle)
@@ -85,6 +87,7 @@ class Tab(
                 o.optString("icon").takeIf { it.startsWith("http") }?.let { iconUrl = it }
             }
             "text" -> { pending?.invoke(o); pending = null }
+            "warm" -> if (!private) Engine.warm(o.optString("url"))
             "login" -> Fire.loginSeen(this, runCatching { Uri.parse(o.optString("url")).host }.getOrNull() ?: host)
         }
     }

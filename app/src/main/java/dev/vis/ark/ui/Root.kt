@@ -164,7 +164,7 @@ fun ArkRoot(activity: MainActivity) {
         }.onFailure { next() }
     }
 
-    fun openSwitcher() = captureThen { switcher = true }
+    fun openSwitcher() { dev.vis.ark.Perf.mark("switcherTap"); captureThen { switcher = true; dev.vis.ark.Perf.mark("switcherOpen") } }
 
     fun menuAction(a: MenuAction) {
         val t = Browser.current

@@ -3,15 +3,20 @@
   let port;
   try { port = browser.runtime.connectNative("ark"); } catch (e) { return; }
 
+  // Normalizes any CSS color to "rgb(r, g, b)" / "rgba(r, g, b, a)" through a detached canvas: no element is added to
+  // the page, so the page's own observers never see it and no style recalculation is forced.
+  let cx;
   const norm = (c) => {
     if (!c) return "";
-    const d = document.createElement("div");
-    d.style.color = c;
-    d.style.display = "none";
-    (document.body || document.documentElement).appendChild(d);
-    const v = getComputedStyle(d).color;
-    d.remove();
-    return v;
+    try {
+      cx = cx || document.createElement("canvas").getContext("2d");
+      cx.fillStyle = "#010203";
+      cx.fillStyle = c;
+      const v = String(cx.fillStyle);
+      if (v === "#010203" && !/^#?010203$/i.test(c.trim())) return "";
+      const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(v);
+      return m ? `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})` : v;
+    } catch (e) { return ""; }
   };
 
   const meta = () => {
@@ -34,8 +39,12 @@
       return s(b) - s(a);
     })[0];
     if (best && best.href && !best.href.endsWith(".svg")) icon = best.href;
+    const msg = JSON.stringify([theme, icon, location.href]);
+    if (msg === lastMeta) return; // unchanged: don't wake the app
+    lastMeta = msg;
     port.postMessage({ type: "meta", theme, icon, url: location.href });
   };
+  let lastMeta = "";
 
   // Readability-lite: find the element holding the most real paragraph text, then read only that.
   const JUNK = "script,style,noscript,nav,footer,header,aside,form,svg,iframe,button,dialog,[role=navigation],[role=banner],[role=contentinfo],[role=complementary],[aria-hidden=true],.comments,#comments,.related,.share,.newsletter,.cookie,.advert,.ad";
@@ -88,6 +97,7 @@
     } else if (m.type === "extract") {
       extract();
     } else if (m.type === "meta") {
+      lastMeta = "";
       meta();
     }
   });
@@ -115,6 +125,19 @@
     if (e.key === "Enter" && e.target && e.target.type === "password" && e.target.value) login();
   }, true);
 
+  // A finger on a link to another site: have the app open the connection while the tap finishes.
+  let lastWarm = "";
+  document.addEventListener("pointerdown", (e) => {
+    const a = e.target && e.target.closest && e.target.closest("a[href]");
+    if (!a) return;
+    const h = a.href;
+    if (!/^https?:/i.test(h) || h === lastWarm) return;
+    try { if (new URL(h).origin === location.origin) return; } catch (_) { return; }
+    lastWarm = h;
+    port.postMessage({ type: "warm", url: h });
+  }, { capture: true, passive: true });
+
+  // Theme color and icon, ready for the first paint so the status bar matches the page from the start.
   meta();
   const mo = new MutationObserver(() => { clearTimeout(window.__arkMeta); window.__arkMeta = setTimeout(meta, 400); });
   const head = document.head;

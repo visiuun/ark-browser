@@ -76,6 +76,9 @@ object Media {
         runCatching { ctx.getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(f) }
     }
 
+    /** Whether [t] is the tab whose media is in the notification / lock screen controls (playing or paused). */
+    fun holds(t: Tab) = tab === t
+
     fun init(c: Context) {
         if (::ctx.isInitialized) return
         ctx = c.applicationContext

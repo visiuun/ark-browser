@@ -28,6 +28,24 @@ import java.time.LocalDate
 object Net {
     private const val UA = "ArkBrowser/1.0 (Android; open-source personal browser)"
 
+    // Home screen data is kept for a while, so coming back to the home screen shows it at once instead of
+    // spinners and a dozen requests every time.
+    private class Memo(val at: Long, val value: Any?)
+    private val memo = java.util.concurrent.ConcurrentHashMap<String, Memo>()
+    private fun now() = android.os.SystemClock.elapsedRealtime()
+
+    @Suppress("UNCHECKED_CAST")
+    fun <T> peek(key: String, ttlMs: Long): T? = memo[key]?.takeIf { now() - it.at < ttlMs }?.value as T?
+
+    private suspend fun <T : Any> memoized(key: String, ttlMs: Long, load: suspend () -> T): T {
+        peek<T>(key, ttlMs)?.let { return it }
+        return load().also { memo[key] = Memo(now(), it) }
+    }
+
+    const val WIKI_TTL = 30 * 60_000L
+    const val HN_TTL = 5 * 60_000L
+    const val WEATHER_TTL = 10 * 60_000L
+
     suspend fun get(url: String): String = withContext(Dispatchers.IO) {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 8000; c.readTimeout = 10000
@@ -57,19 +75,29 @@ object Net {
         val sunrise: String, val sunset: String, val hours: List<Hour>, val days: List<Day>, val unit: String,
     )
 
-    suspend fun geocode(city: String): Triple<Double, Double, String>? = runCatching {
+    suspend fun geocode(city: String): Triple<Double, Double, String>? = peek("geo:$city", 24 * 3600_000L) ?: geocodeNow(city)?.also { memo["geo:$city"] = Memo(now(), it) }
+
+    private suspend fun geocodeNow(city: String): Triple<Double, Double, String>? = runCatching {
         val o = JSONObject(get("https://geocoding-api.open-meteo.com/v1/search?count=1&name=${enc(city)}"))
         val r = o.getJSONArray("results").getJSONObject(0)
         Triple(r.getDouble("latitude"), r.getDouble("longitude"), r.getString("name"))
     }.getOrNull()
 
-    suspend fun placeName(lat: Double, lon: Double): String? = runCatching {
+    suspend fun placeName(lat: Double, lon: Double): String? {
+        val key = "place:%.2f,%.2f".format(java.util.Locale.ROOT, lat, lon)
+        return peek(key, 24 * 3600_000L) ?: placeNameNow(lat, lon)?.also { memo[key] = Memo(now(), it) }
+    }
+
+    private suspend fun placeNameNow(lat: Double, lon: Double): String? = runCatching {
         val o = JSONObject(get("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&lat=$lat&lon=$lon"))
         val a = o.getJSONObject("address")
         listOf("city", "town", "village", "municipality", "county", "state").firstNotNullOfOrNull { k -> a.optString(k).takeIf { it.isNotBlank() } }
     }.getOrNull()
 
-    suspend fun weather(lat: Double, lon: Double, place: String, fahrenheit: Boolean): Weather {
+    suspend fun weather(lat: Double, lon: Double, place: String, fahrenheit: Boolean): Weather =
+        memoized("wx:%.2f,%.2f,$place,$fahrenheit".format(java.util.Locale.ROOT, lat, lon), WEATHER_TTL) { weatherNow(lat, lon, place, fahrenheit) }
+
+    private suspend fun weatherNow(lat: Double, lon: Double, place: String, fahrenheit: Boolean): Weather {
         val unit = if (fahrenheit) "&temperature_unit=fahrenheit&wind_speed_unit=mph" else ""
         val o = JSONObject(
             get(
@@ -124,7 +152,9 @@ object Net {
         url = o.optJSONObject("content_urls")?.optJSONObject("mobile")?.optString("page") ?: "",
     )
 
-    suspend fun wikipedia(lang: String): WikiFeed {
+    suspend fun wikipedia(lang: String): WikiFeed = memoized("wiki:$lang:${LocalDate.now()}", WIKI_TTL) { wikipediaNow(lang) }
+
+    private suspend fun wikipediaNow(lang: String): WikiFeed {
         val d = LocalDate.now()
         val path = "%04d/%02d/%02d".format(d.year, d.monthValue, d.dayOfMonth)
         val o = runCatching { JSONObject(get("https://$lang.wikipedia.org/api/rest_v1/feed/featured/$path")) }
@@ -154,7 +184,10 @@ object Net {
     // ---------- Hacker News ----------
     data class Story(val title: String, val url: String, val score: Int, val comments: Int, val by: String, val id: Long)
 
-    suspend fun hackerNews(n: Int = 8): List<Story> = coroutineScope {
+    suspend fun hackerNews(n: Int = 8): List<Story> = peek("hn:$n", HN_TTL)
+        ?: hackerNewsNow(n).also { if (it.isNotEmpty()) memo["hn:$n"] = Memo(now(), it) }
+
+    private suspend fun hackerNewsNow(n: Int): List<Story> = coroutineScope {
         val ids = JSONArray(get("https://hacker-news.firebaseio.com/v0/topstories.json"))
         (0 until minOf(n, ids.length())).map { i ->
             async {
@@ -172,7 +205,7 @@ object Net {
 
     // ---------- Images (favicons, thumbnails) ----------
     private val images = LruCache<String, ImageBitmap>(160)
-    private val failed = HashSet<String>()
+    private val failed: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet() // written from several IO threads
 
     fun cachedImage(url: String): ImageBitmap? = images.get(url)
 

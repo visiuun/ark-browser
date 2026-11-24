@@ -109,6 +109,15 @@ fun SearchSheetContent(
         if (Prefs.suggestions && !private) { delay(140); remote = Net.suggestions(q) }
     }
 
+    // Connect to the search engine as soon as the sheet opens, and to a typed address once typing pauses,
+    // so the page starts loading the moment Go is pressed.
+    LaunchedEffect(q, private) {
+        if (private) return@LaunchedEffect
+        if (q.isEmpty()) { dev.vis.ark.browser.Engine.warm(Search.searchUrl("")); return@LaunchedEffect }
+        delay(250)
+        dev.vis.ark.browser.Engine.warm(Search.resolve(q))
+    }
+
     fun go(text: String) {
         if (text.isBlank()) return
         Browser.open(text, inNewTab = newTab, private = private)

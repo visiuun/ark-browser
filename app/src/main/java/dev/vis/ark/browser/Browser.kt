@@ -195,11 +195,11 @@ object Browser {
         val s = createSession(t)
         s.open(Engine.runtime)
         t.session = s
+        val live = t.liveState
         val state = t.savedState
-        if (state != null) {
-            runCatching { s.restoreState(GeckoSession.SessionState.fromString(state) ?: error("bad state")) }
+        if (live != null || state != null) {
+            runCatching { s.restoreState(live ?: GeckoSession.SessionState.fromString(state) ?: error("bad state")) }
                 .onFailure { if (t.url.isNotBlank()) s.loadUri(t.url) }
-            t.savedState = null
         } else if (t.url.isNotBlank() && t.progress == 0) {
             s.loadUri(t.url)
         }
@@ -219,6 +219,30 @@ object Browser {
         }
         viewEpoch++
         save()
+        main.post { trimSessions() }
+    }
+
+    // ---------------------------------------------------------------- unloading background tabs
+
+    /** Background tabs that keep a live engine session; older ones are unloaded and come back from saved state. */
+    private const val LIVE_BACKGROUND_TABS = 5
+
+    private fun unloadable(t: Tab) = t.session != null && t.id != currentId && t.liveState != null &&
+        !Media.holds(t) && !t.mediaRecording && !t.fullscreen && !t.loading
+
+    /**
+     * Each open page costs a content process' worth of memory. Like Firefox and Chrome, Ark keeps only the most
+     * recently used background tabs live ([keep] of them); the rest give back their memory and restore from their
+     * saved state (history, scroll position, form text) the moment they're opened again. Tabs playing or recording
+     * media, in fullscreen, or still loading are never unloaded.
+     */
+    fun trimSessions(keep: Int = LIVE_BACKGROUND_TABS) {
+        tabs.filter(::unloadable).sortedByDescending { it.lastUsed }.drop(keep).forEach { t ->
+            val s = t.session ?: return@forEach
+            t.session = null
+            t.port = null
+            runCatching { s.close() }
+        }
     }
 
     fun close(t: Tab, undoable: Boolean = true) {
@@ -262,7 +286,10 @@ object Browser {
         prompts.clear()
         currentId = null
         main.removeCallbacks(saver)
+        writeGen++
         Prefs.putString("tabs", null)
+        val f = tabsFile
+        io.execute { f.delete() }
         viewEpoch++
     }
 
@@ -298,21 +325,60 @@ object Browser {
 
     // ---------------------------------------------------------------- persistence
 
-    private val saver = Runnable { saveNow() }
+    private val saver = Runnable { saveNow(sync = false) }
     fun save() { main.removeCallbacks(saver); main.postDelayed(saver, 700) }
 
-    fun saveNow() {
+    /**
+     * The open tabs live in their own file (not the settings file: every settings change would rewrite them,
+     * and they were read in full on every start). Serializing session state (history, scroll, form data) is
+     * the slow part, so routine saves do it on [io]; leaving the app writes synchronously so nothing is lost.
+     */
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "ark-tabs").apply { priority = Thread.MIN_PRIORITY + 1 } }
+    private val tabsFile by lazy { java.io.File(app.filesDir, "tabs.json") }
+    @Volatile private var writeGen = 0L
+
+    private class Saved(val id: Long, val url: String, val title: String, val desktop: Boolean, val state: GeckoSession.SessionState?, val text: String?)
+
+    fun saveNow(sync: Boolean = true) {
         if (!initialized) return
-        if (Prefs.forget) { Prefs.putString("tabs", null); return }
-        val arr = JSONArray()
-        tabs.filter { !it.private && it.url.isNotBlank() }.forEach {
-            arr.put(JSONObject().put("id", it.id).put("url", it.url).put("title", it.title).put("state", it.savedState ?: JSONObject.NULL).put("desktop", it.desktop))
+        main.removeCallbacks(saver)
+        val gen = ++writeGen
+        if (Prefs.forget) { val f = tabsFile; io.execute { f.delete() }; return }
+        val snap = tabs.filter { !it.private && it.url.isNotBlank() }.map { Saved(it.id, it.url, it.title, it.desktop, it.liveState, it.savedState) }
+        val cur = currentId ?: -1
+        val write = Runnable {
+            if (gen != writeGen) return@Runnable // a newer save is queued
+            runCatching {
+                val arr = JSONArray()
+                snap.forEach {
+                    val state = it.state?.toString() ?: it.text
+                    arr.put(JSONObject().put("id", it.id).put("url", it.url).put("title", it.title).put("state", state ?: JSONObject.NULL).put("desktop", it.desktop))
+                }
+                val tmp = java.io.File(tabsFile.parentFile, "tabs.json.tmp")
+                tmp.writeText(JSONObject().put("tabs", arr).put("current", cur).toString())
+                if (!tmp.renameTo(tabsFile)) { tabsFile.delete(); tmp.renameTo(tabsFile) }
+            }
         }
-        Prefs.putString("tabs", JSONObject().put("tabs", arr).put("current", currentId ?: -1).toString())
+        if (sync) runCatching { io.submit(write).get(2, java.util.concurrent.TimeUnit.SECONDS) } else io.execute(write)
+    }
+
+    private var prefetched: java.util.concurrent.Future<String?>? = null
+
+    /** Called as the process starts: reads the saved tabs on [io] while the engine starts up on the main thread. */
+    fun prefetch(ctx: Context) {
+        if (prefetched != null || initialized) return
+        val f = java.io.File(ctx.filesDir, "tabs.json")
+        prefetched = io.submit<String?> { runCatching { f.readText() }.getOrNull() }
     }
 
     private fun restore() {
-        val raw = Prefs.getString("tabs") ?: return
+        // Tabs saved by Ark 1.6.6 and older sit in the settings file: move them over once.
+        val legacy = Prefs.getString("tabs")
+        val fromFile = prefetched?.let { runCatching { it.get(3, java.util.concurrent.TimeUnit.SECONDS) }.getOrNull() }
+            ?: runCatching { tabsFile.readText() }.getOrNull()
+        prefetched = null
+        val raw = fromFile ?: legacy ?: return
+        if (legacy != null) Prefs.putString("tabs", null)
         runCatching {
             val o = JSONObject(raw)
             val arr = o.getJSONArray("tabs")
@@ -326,6 +392,7 @@ object Browser {
             val cur = o.optLong("current", -1)
             tabs.firstOrNull { it.id == cur }?.let { select(it) }
         }
+        if (legacy != null) saveNow(sync = false)
     }
 
     // ---------------------------------------------------------------- sessions
@@ -419,6 +486,7 @@ object Browser {
 
         s.progressDelegate = object : ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
+                dev.vis.ark.Perf.mark("pageStart $url")
                 // A new load (not the error page that just replaced a failed one) means the error is gone.
                 if (t.failedUri != null && url != t.errorPage && (url != t.failedUri || System.currentTimeMillis() - t.failedAt > 1500)) t.failedUri = null
                 t.loading = true; t.progress = 8; t.blockedCount = 0; t.blockedHosts.clear(); t.offerTranslate = false
@@ -427,6 +495,7 @@ object Browser {
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                dev.vis.ark.Perf.mark("pageStop ${t.url}")
                 t.loading = false; t.progress = 100
                 Fire.onPageStop(t)
             }
@@ -434,7 +503,7 @@ object Browser {
             override fun onProgressChange(session: GeckoSession, progress: Int) { t.progress = progress }
             override fun onSecurityChange(session: GeckoSession, securityInfo: ProgressDelegate.SecurityInformation) { t.security = securityInfo }
             override fun onSessionStateChange(session: GeckoSession, sessionState: GeckoSession.SessionState) {
-                t.savedState = sessionState.toString(); save()
+                t.liveState = sessionState; t.savedState = null; save()
             }
         }
 
@@ -476,6 +545,8 @@ object Browser {
                 }
                 Downloads.save(app, response, t.private)
             }
+
+            override fun onFirstContentfulPaint(session: GeckoSession) { dev.vis.ark.Perf.mark("fcp ${t.url}") }
 
             override fun onCloseRequest(session: GeckoSession) { main.post { close(t, undoable = false) } }
 

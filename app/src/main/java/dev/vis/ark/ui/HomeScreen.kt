@@ -206,16 +206,21 @@ private suspend fun currentLocation(ctx: Context): Location? = withContext(Dispa
     } else last
 }
 
+/** The last forecast shown and the settings it was for, so the card appears filled in when the home screen returns. */
+private var lastWeather: Pair<String, WeatherState>? = null
+
 @Composable
 private fun WeatherCard(activity: MainActivity) {
     val cs = MaterialTheme.colorScheme
     val ctx = LocalContext.current
-    var state by remember { mutableStateOf<WeatherState>(WeatherState.Loading) }
+    val wxKey = "${Prefs.weatherCity.trim()}|${Prefs.fahrenheit}"
+    var state by remember { mutableStateOf<WeatherState>(lastWeather?.takeIf { it.first == wxKey }?.second ?: WeatherState.Loading) }
     var reload by remember { mutableIntStateOf(0) }
     val hasPerm = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     LaunchedEffect(reload, Prefs.weatherCity, Prefs.fahrenheit) {
-        state = WeatherState.Loading
+        // Coming back to the home screen: keep showing the last forecast while it refreshes, no spinner.
+        if (state !is WeatherState.Ready || lastWeather?.first != wxKey) state = WeatherState.Loading
         state = runCatching {
             val city = Prefs.weatherCity.trim()
             if (city.isNotEmpty()) {
@@ -228,6 +233,7 @@ private fun WeatherCard(activity: MainActivity) {
                 WeatherState.Ready(Net.weather(loc.latitude, loc.longitude, place, Prefs.fahrenheit))
             }
         }.getOrElse { WeatherState.Error("Weather unavailable (${it.message})") }
+        lastWeather = (state as? WeatherState.Ready)?.let { wxKey to it }
     }
 
     SectionLabel("Weather")
@@ -329,7 +335,7 @@ fun weatherEmoji(code: Int, day: Boolean) = when (code) {
 @Composable
 private fun WikiCards() {
     val cs = MaterialTheme.colorScheme
-    var feed by remember { mutableStateOf<Net.WikiFeed?>(null) }
+    var feed by remember { mutableStateOf<Net.WikiFeed?>(Net.peek("wiki:${Prefs.wikiLang}:${java.time.LocalDate.now()}", Net.WIKI_TTL)) }
     var failed by remember { mutableStateOf(false) }
     LaunchedEffect(Prefs.wikiLang) { feed = runCatching { Net.wikipedia(Prefs.wikiLang) }.onFailure { failed = true }.getOrNull() }
     val f = feed
@@ -407,7 +413,7 @@ fun NetImage(url: String, modifier: Modifier) {
 @Composable
 private fun HackerNewsCard() {
     val cs = MaterialTheme.colorScheme
-    var stories by remember { mutableStateOf<List<Net.Story>?>(null) }
+    var stories by remember { mutableStateOf<List<Net.Story>?>(Net.peek("hn:8", Net.HN_TTL)) }
     LaunchedEffect(Unit) { stories = runCatching { Net.hackerNews(8) }.getOrDefault(emptyList()) }
     SectionLabel("Hacker News")
     Card {

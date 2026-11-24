@@ -61,9 +61,14 @@ object Vault {
         "addressLevel3", "addressLevel2", "addressLevel1", "postalCode", "country", "tel", "email",
     )
 
-    val logins = mutableListOf<Login>()
-    val cards = mutableListOf<Card>()
-    val addresses = mutableListOf<Address>()
+    // Loaded on a background thread at startup (decrypting with the Android Keystore takes a while on some phones);
+    // anything that reads the lists before that finishes waits for it.
+    private val _logins = mutableListOf<Login>()
+    private val _cards = mutableListOf<Card>()
+    private val _addresses = mutableListOf<Address>()
+    val logins: MutableList<Login> get() { awaitLoad(); return _logins }
+    val cards: MutableList<Card> get() { awaitLoad(); return _cards }
+    val addresses: MutableList<Address> get() { awaitLoad(); return _addresses }
 
     /** Bumped on every change so Compose screens re-read the lists. */
     val version = mutableIntStateOf(0)
@@ -71,12 +76,19 @@ object Vault {
     private lateinit var file: File
     private var loaded = false
 
+    private val loading = java.util.concurrent.CountDownLatch(1)
+
     fun init(ctx: Context) {
         if (loaded) return
-        file = File(ctx.applicationContext.filesDir, FILE)
-        runCatching { load() }.onFailure { Log.e(TAG, "couldn't open the vault", it) }
         loaded = true
+        file = File(ctx.applicationContext.filesDir, FILE)
+        Thread({
+            runCatching { load() }.onFailure { Log.e(TAG, "couldn't open the vault", it) }
+            loading.countDown()
+        }, "ark-vault").start()
     }
+
+    private fun awaitLoad() { if (loading.count > 0) loading.await() }
 
     // ---------------------------------------------------------------- crypto
 
@@ -114,10 +126,10 @@ object Vault {
     private fun load() {
         if (!file.exists()) return
         val o = JSONObject(String(decrypt(file.readBytes()), Charsets.UTF_8))
-        logins.clear(); cards.clear(); addresses.clear()
+        _logins.clear(); _cards.clear(); _addresses.clear()
         o.optJSONArray("logins")?.let { a ->
             for (i in 0 until a.length()) a.getJSONObject(i).run {
-                logins += Login(
+                _logins += Login(
                     getString("guid"), getString("origin"), optString("formActionOrigin").ifBlank { null }, optString("httpRealm").ifBlank { null },
                     optString("username"), optString("password"), optLong("created"), optLong("changed"), optLong("lastUsed"), optInt("timesUsed"),
                 )
@@ -125,16 +137,16 @@ object Vault {
         }
         o.optJSONArray("cards")?.let { a ->
             for (i in 0 until a.length()) a.getJSONObject(i).run {
-                cards += Card(getString("guid"), optString("name"), optString("number"), optString("expMonth"), optString("expYear"), optLong("created"))
+                _cards += Card(getString("guid"), optString("name"), optString("number"), optString("expMonth"), optString("expYear"), optLong("created"))
             }
         }
         o.optJSONArray("addresses")?.let { a ->
             for (i in 0 until a.length()) a.getJSONObject(i).run {
                 val f = optJSONObject("fields") ?: JSONObject()
-                addresses += Address(getString("guid"), f.keys().asSequence().associateWith { f.optString(it) }, optLong("created"))
+                _addresses += Address(getString("guid"), f.keys().asSequence().associateWith { f.optString(it) }, optLong("created"))
             }
         }
-        version.intValue++
+        android.os.Handler(android.os.Looper.getMainLooper()).post { version.intValue++ }
     }
 
     private fun save() {

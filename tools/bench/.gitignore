@@ -1,0 +1,5 @@
+www/
+beacons.jsonl
+*_results.jsonl
+results.jsonl
+__pycache__/

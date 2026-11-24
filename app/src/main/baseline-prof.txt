@@ -1,0 +1,5 @@
+# Ahead-of-time compile all of Ark's own code (startup, sheets, tab switcher, settings). Ark is installed from an
+# APK, not the Play Store, so there are no cloud profiles: without this its UI code starts interpreted and is
+# only JIT-compiled after it has already stuttered. profileinstaller applies this on first launch.
+HSPLdev/vis/ark/**;->**(**)**
+Ldev/vis/ark/**;

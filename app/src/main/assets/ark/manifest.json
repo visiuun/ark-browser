@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Ark helper",
-  "version": "1.2",
+  "version": "1.4",
   "description": "Built-in helper for the Ark browser (page zoom, theme color, page text, sign-in detection for fire mode).",
   "browser_specific_settings": {
     "gecko": {

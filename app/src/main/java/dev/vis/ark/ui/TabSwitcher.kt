@@ -130,11 +130,13 @@ fun TabSwitcher(onClose: () -> Unit, onNewTab: (Boolean) -> Unit, onSettings: ()
                         key = { list[it].id },
                     ) { page ->
                         val t = list[page]
-                        val offset = ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue
                         Box(
+                            // The swipe position is read in the layer, not in composition: swiping only redraws the
+                            // cards instead of recomposing every one of them on every frame.
                             Modifier.fillMaxSize().graphicsLayer {
-                                val s = 1f - 0.08f * offset.coerceIn(0f, 1f)
-                                scaleX = s; scaleY = s; alpha = 1f - 0.35f * offset.coerceIn(0f, 1f)
+                                val offset = ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
+                                val s = 1f - 0.08f * offset
+                                scaleX = s; scaleY = s; alpha = 1f - 0.35f * offset
                             },
                             contentAlignment = Alignment.Center,
                         ) {

@@ -32,9 +32,12 @@ android {
         applicationId = "dev.vis.ark"
         minSdk = 26
         targetSdk = 36
-        versionCode = 24
-        versionName = "1.6.6"
+        versionCode = 25
+        versionName = "1.6.7"
         buildConfigField("String", "UPDATE_REPO", "\"visiuun/ark-browser\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // -ParkIdSuffix=.base installs a second copy next to the normal one (side-by-side benchmarking).
+        providers.gradleProperty("arkIdSuffix").orNull?.let { applicationIdSuffix = it }
     }
 
     flavorDimensions += "abi"
@@ -87,7 +90,7 @@ android {
 }
 
 dependencies {
-    val gecko = "160.0.20261104181552"
+    val gecko = "161.0.20261118180411"
     "arm64Implementation"("org.mozilla.geckoview:geckoview-arm64-v8a:$gecko")
     "x64Implementation"("org.mozilla.geckoview:geckoview-x86_64:$gecko")
 
@@ -99,4 +102,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    // On-device tests: ./gradlew connectedX64DebugAndroidTest (emulator) or connectedArm64DebugAndroidTest (phone)
+    androidTestImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:core:1.5.0")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
 }

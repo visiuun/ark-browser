@@ -126,6 +126,31 @@ object Engine {
         refreshExtensions()
     }
 
+    // ---------------------------------------------------------------- connection warm-up
+
+    private val webExecutor by lazy { org.mozilla.geckoview.GeckoWebExecutor(runtime) }
+    private var warmed = ""
+    private var warmedAt = 0L
+
+    /**
+     * Starts the DNS lookup, TCP and TLS handshakes for [url]'s site before Ark navigates there: while an address is
+     * typed, when the search sheet opens, and when a finger lands on a link. Only the connection is made; nothing is
+     * requested. Never used for private tabs (it shares the normal connection pool).
+     */
+    fun warm(url: String) {
+        if (!isReady) return
+        val u = runCatching { android.net.Uri.parse(url) }.getOrNull() ?: return
+        var scheme = u.scheme?.lowercase() ?: return
+        val host = u.host?.takeIf { it.isNotBlank() } ?: return
+        if (scheme != "http" && scheme != "https") return
+        if (scheme == "http" && Prefs.httpsOnly) scheme = "https"
+        val origin = "$scheme://$host" + (if (u.port > 0) ":${u.port}" else "") + "/"
+        val now = android.os.SystemClock.uptimeMillis()
+        if (origin == warmed && now - warmedAt < 10_000) return
+        warmed = origin; warmedAt = now
+        runCatching { webExecutor.speculativeConnect(origin) }
+    }
+
     // ---------------------------------------------------------------- ad blocker (bundled uBlock Origin)
 
     /**
